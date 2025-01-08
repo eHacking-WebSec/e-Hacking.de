@@ -1,19 +1,30 @@
 services:
 
   traefik:
-    image: traefik:3.1
+    image: traefik:3.3
     command:
-      - '--providers.docker=true'
-      - '--entrypoints.web.address=:${PORT_HTTP}'
-      - '--entrypoints.websecure.address=:${PORT_HTTPS}'
-      - '--entrypoints.websecure.http.tls=true'
+      # https://doc.traefik.io/traefik/user-guides/docker-compose/acme-http/
+      #- "--log.level=DEBUG"
+      # - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:${PORT_HTTP}"
+      - "--entryPoints.websecure.address=:${PORT_HTTPS}"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      #- "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=postmaster@e-hacking.de"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - '${PORT_HTTP}:${PORT_HTTP}'
       - '${PORT_HTTPS}:${PORT_HTTPS}'
     volumes:
-      - '/var/run/docker.sock:/var/run/docker.sock'
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - ehacking
+    labels:
+      - 'com.centurylinklabs.watchtower.enable=true'
 
   all-in-one:
     image: ghcr.io/chearix/elearningsso/ehacking:master
@@ -32,7 +43,8 @@ services:
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
       - 'traefik.http.routers.all-in-one.rule=Host(`${IDP_HOST}`) || Host(`${RS_HOST}`) || Host(`${SP_HOST}`) || Host(`${SPA_HOST}`)'
       - 'traefik.http.services.all-in-one.loadbalancer.server.port=80'
-      - 'traefik.http.routers.all-in-one.priority=1000'
+      - "traefik.http.routers.whoami.tls.certresolver=myresolver"
+      - 'com.centurylinklabs.watchtower.enable=true'
     networks:
       - ehacking
 
@@ -45,6 +57,7 @@ services:
       - ehacking
     labels:
       - 'traefik.enable=true'
+      - 'com.centurylinklabs.watchtower.enable=true'
 
 networks:
   ehacking:
