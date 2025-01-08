@@ -29,6 +29,7 @@ services:
     image: ghcr.io/chearix/elearningsso/ehacking:master
     depends_on:
       - traefik
+      - couchdb
     env_file:
       - .env
     environment:
