@@ -80,6 +80,3 @@ services:
       - 'com.centurylinklabs.watchtower.enable=true'
     restart: always
 
-
-networks:
-  ehacking:
