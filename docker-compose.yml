@@ -62,5 +62,31 @@ services:
       - 'traefik.enable=true'
       - 'com.centurylinklabs.watchtower.enable=true'
 
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Europe/Berlin
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      # - WATCHTOWER_RUN_ONCE=true
+      # Field name   | Mandatory? | Allowed values  | Allowed special characters
+      # ----------   | ---------- | --------------  | --------------------------
+      # Seconds      | Yes        | 0-59            | * / , -
+      # Minutes      | Yes        | 0-59            | * / , -
+      # Hours        | Yes        | 0-23            | * / , -
+      # Day of month | Yes        | 1-31            | * / , - ?
+      # Month        | Yes        | 1-12 or JAN-DEC | * / , -
+      # Day of week  | Yes        | 0-6 or SUN-SAT  | * / , - ?
+      - WATCHTOWER_SCHEDULE=0 0 7 * * * # every day on 7am
+    labels:
+      - 'com.centurylinklabs.watchtower.enable=true'
+    restart: always
+    networks:
+      - ehacking
+
+
 networks:
   ehacking:
