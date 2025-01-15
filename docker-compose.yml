@@ -26,7 +26,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   all-in-one:
-    image: ghcr.io/ehacking-websec/ehacking:main
+    image: ghcr.io/ehacking-websec/ehacking/ehacking:main
     depends_on:
       - traefik
       - couchdb
