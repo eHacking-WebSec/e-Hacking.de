@@ -27,6 +27,7 @@ services:
 
   app:
     image: ghcr.io/ehacking-websec/ehacking/ehacking:main
+    pull_policy: always
     depends_on:
       - traefik
       - couchdb
