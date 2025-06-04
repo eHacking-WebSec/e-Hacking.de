@@ -1,7 +1,7 @@
 services:
 
   traefik:
-    image: traefik:3.3
+    image: docker.io/traefik:3.3
     command:
       # https://doc.traefik.io/traefik/user-guides/docker-compose/acme-http/
       #- "--log.level=DEBUG"
@@ -49,7 +49,7 @@ services:
     restart: always
 
   couchdb:
-    image: couchdb:latest
+    image: docker.io/couchdb:latest
     environment:
       COUCHDB_USER: "root"
       COUCHDB_PASSWORD: "super_secure"
@@ -59,7 +59,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   watchtower:
-    image: containrrr/watchtower
+    image: docker.io/containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
