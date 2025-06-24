@@ -58,6 +58,22 @@ services:
       - "traefik.enable=true"
       - "com.centurylinklabs.watchtower.enable=true"
 
+  rookies:
+    image: ghcr.io/ehacking-websec/rookies:latest
+    pull_policy: always
+    depends_on:
+      - traefik
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rookies.entrypoints=websecure"
+      - "traefik.http.routers.rookies.rule=Host(`${ROOKIES_HOST}`)"
+      - "traefik.http.services.rookies.loadbalancer.server.port=3000"
+      - "traefik.http.routers.rookies.tls.certresolver=myresolver"
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: always
+
   watchtower:
     image: docker.io/containrrr/watchtower
     volumes:
