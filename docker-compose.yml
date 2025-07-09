@@ -26,7 +26,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   app:
-    image: ghcr.io/ehacking-websec/ehacking/ehacking:main
+    image: ghcr.io/ehacking-websec/ehacking/ehacking:${DOCKER_TAG}
     pull_policy: always
     depends_on:
       - traefik
