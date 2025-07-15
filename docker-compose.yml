@@ -45,9 +45,6 @@ services:
       - SPA_URL=https://${SPA_HOST}:${PORT_HTTPS}
       - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
-    networks:
-      - default
-      - soap-internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.all-in-one.entrypoints=websecure"
@@ -64,8 +61,6 @@ services:
       - .axis2-flag.env
     expose:
       - "8080"
-    networks:
-      - soap-internal
     develop:
       watch:
         - action: rebuild
@@ -130,7 +125,3 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: always
-
-networks:
-  default:
-  soap-internal:
