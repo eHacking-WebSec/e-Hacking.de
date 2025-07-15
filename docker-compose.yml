@@ -31,6 +31,8 @@ services:
     depends_on:
       - traefik
       - couchdb
+      - axis2-flag
+      - axis2-fake
     env_file:
       - .env
     environment:
