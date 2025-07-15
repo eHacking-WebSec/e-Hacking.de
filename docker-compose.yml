@@ -53,9 +53,9 @@ services:
 
   axis2-flag:
     build:
-      context: ./soap-sec/internal-axis2-services:${DOCKER_TAG}
+      context: ./soap-sec/internal-axis2-services
       dockerfile: Dockerfile
-    image: ${DOCKER_REGISTRY}/axis2-flag
+    image: ${DOCKER_REGISTRY}/axis2-flag:${DOCKER_TAG}
     env_file:
       - .axis2-flag.env
     expose:
