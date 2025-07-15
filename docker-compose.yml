@@ -73,6 +73,8 @@ services:
 
   axis2-fake:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
+    depends_on:
+      - traefik
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.axis2-fake.entrypoints=websecure'
