@@ -53,7 +53,7 @@ services:
 
   axis2-flag:
     build:
-      context: ./soap-sec/internal-axis2-services
+      context: ./soap-sec/internal-axis2-services:${DOCKER_TAG}
       dockerfile: Dockerfile
     image: ${DOCKER_REGISTRY}/axis2-flag
     env_file:
@@ -71,7 +71,7 @@ services:
     build:
       context: ./soap-sec/internal-axis2-services
       dockerfile: Dockerfile
-    image: ${DOCKER_REGISTRY}/axis2-flag
+    image: ${DOCKER_REGISTRY}/axis2-flag:${DOCKER_TAG}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.axis2-fake.entrypoints=websecure'
