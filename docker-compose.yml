@@ -46,6 +46,9 @@ services:
       - SPA_URL=https://${SPA_HOST}:${PORT_HTTPS}
       - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
+      - FLAG_SOAP_AUTH_WSS=${FLAG_SOAP_AUTH_WSS}
+      - FLAG_SOAP_AUTH_ADMIN1=${FLAG_SOAP_AUTH_ADMIN1}
+      - FLAG_SOAP_AUTH_ADMIN2=${FLAG_SOAP_AUTH_ADMIN2}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
@@ -58,8 +61,8 @@ services:
 
   axis2-flag:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
-    env_file:
-      - .axis2-flag.env
+    environment:
+      - FLAG_WSADDRESSING_SPOOFING_TO=${FLAG_WSADDRESSING_SPOOFING_TO}
     expose:
       - "8080"
     develop:
