@@ -46,9 +46,17 @@ services:
       - SPA_URL=https://${SPA_HOST}:${PORT_HTTPS}
       - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
-      - FLAG_SOAP_AUTH_WSS=${FLAG_SOAP_AUTH_WSS}
-      - FLAG_SOAP_AUTH_ADMIN1=${FLAG_SOAP_AUTH_ADMIN1}
-      - FLAG_SOAP_AUTH_ADMIN2=${FLAG_SOAP_AUTH_ADMIN2}
+      - FLAG_SOAP_AUTH_WSS=${FLAG_SOAP_AUTH_WSS:-FLAG{soap_auth_wss_dummy}}
+      - FLAG_SOAP_AUTH_ADMIN1=${FLAG_SOAP_AUTH_ADMIN1:-FLAG{soap_auth_admin1_dummy}}
+      - FLAG_SOAP_AUTH_ADMIN2=${FLAG_SOAP_AUTH_ADMIN2:-FLAG{soap_auth_admin2_dummy}}
+      - FLAG_JSON_PASSWORD=${FLAG_JSON_PASSWORD:-FLAG{json_password_challenge_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER1=${FLAG_JSON_SIGNATURE_VERIFIER1:-FLAG{json_signature_verifier_1_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER2=${FLAG_JSON_SIGNATURE_VERIFIER2:-FLAG{json_signature_verifier_2_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER3=${FLAG_JSON_SIGNATURE_VERIFIER3:-FLAG{json_signature_verifier_3_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER4=${FLAG_JSON_SIGNATURE_VERIFIER4:-FLAG{json_signature_verifier_4_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER5=${FLAG_JSON_SIGNATURE_VERIFIER5:-FLAG{json_signature_verifier_5_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER6=${FLAG_JSON_SIGNATURE_VERIFIER6:-FLAG{json_signature_verifier_6_dummy}}
+      - FLAG_JSON_SIGNATURE_VERIFIER7=${FLAG_JSON_SIGNATURE_VERIFIER7:-FLAG{json_signature_verifier_7_dummy}}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
