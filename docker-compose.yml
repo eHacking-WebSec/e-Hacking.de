@@ -70,7 +70,7 @@ services:
   axis2-flag:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
     environment:
-      - FLAG_WSADDRESSING_SPOOFING_TO=${FLAG_WSADDRESSING_SPOOFING_TO:-FLAG{soap_wsaddressing_secret_dummy}
+      - FLAG_WSADDRESSING_SPOOFING_TO=${FLAG_WSADDRESSING_SPOOFING_TO:-FLAG{soap_wsaddressing_secret_dummy}}
     expose:
       - "8080"
     develop:
