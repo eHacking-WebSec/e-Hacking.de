@@ -65,8 +65,6 @@ services:
       - .env
     environment:
       - ATTACKER_URL=https://${ATTACKER_HOST}:${PORT_HTTPS}
-    networks:
-      - ehacking
     expose:
       - 8080
     labels:
