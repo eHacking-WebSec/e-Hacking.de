@@ -3,19 +3,17 @@ services:
   traefik:
     image: docker.io/traefik:3.3
     command:
-      # https://doc.traefik.io/traefik/user-guides/docker-compose/acme-http/
-      # - "--log.level=DEBUG"
-      - "--api.insecure=true"
       - '--api.dashboard=true'
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.web.address=:${PORT_HTTP}"
-      - "--entryPoints.websecure.address=:${PORT_HTTPS}"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      #- "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-      - "--certificatesresolvers.myresolver.acme.email=postmaster@e-hacking.de"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - '--api.insecure=true'
+      - '--certificatesresolvers.letsencrypt.acme.email=postmaster@e-hacking.de'
+      - '--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web'
+      - '--certificatesresolvers.letsencrypt.acme.httpchallenge=true'
+      - '--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json'
+      - '--entrypoints.web.address=:${PORT_HTTP}'
+      - '--entrypoints.websecure.address=:${PORT_HTTPS}'
+      - '--entrypoints.websecure.http.tls=true'
+      - '--providers.docker=true'
+      #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
     ports:
       - "${PORT_HTTP}:${PORT_HTTP}"
       - "${PORT_HTTPS}:${PORT_HTTPS}"
@@ -27,7 +25,7 @@ services:
       - 'traefik.http.routers.dashboard.rule=((Host(`${HOST1}`) || Host(`${HOST2}`)) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`)))'
       - 'traefik.http.routers.dashboard.priority=99999'
       - 'traefik.http.routers.dashboard.service=api@internal'
-      - 'traefik.http.routers.dashboard.tls.certresolver=myresolver'
+      - 'traefik.http.routers.dashboard.tls.certresolver=letsencrypt'
       - 'com.centurylinklabs.watchtower.enable=true'
 
   app:
@@ -55,7 +53,7 @@ services:
       - 'traefik.http.routers.all-in-one.rule=(Host(`${HOST1}`) || Host(`${HOST2}`) || Host(`${IDP_HOST}`) || Host(`${JSON_HOST}`) || Host(`${REST_HOST}`) || Host(`${RS_HOST}`) || Host(`${SOAP_HOST}`) || Host(`${SP_HOST}`) || Host(`${SPA_HOST}`) || Host(`${WEBSEC_HOST}`) )'
       - 'traefik.http.routers.all-in-one.priority=1'
       - 'traefik.http.services.all-in-one.loadbalancer.server.port=80'
-      - 'traefik.http.routers.all-in-one.tls.certresolver=myresolver'
+      - 'traefik.http.routers.all-in-one.tls.certresolver=letsencrypt'
       - 'com.centurylinklabs.watchtower.enable=true'
     restart: always
 
@@ -70,6 +68,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.attacker.entrypoints=websecure"
       - "traefik.http.routers.attacker.rule=( Host(`${ATTACKER_HOST}`) || HostRegexp(`^.+\\.${ATTACKER_HOST}$`) )"
+      - 'traefik.http.routers.attacker.tls.certresolver=letsencrypt'
       - "traefik.http.services.attacker.loadbalancer.server.port=8080"
 
   axis2-flag:
@@ -92,7 +91,7 @@ services:
       - 'traefik.http.routers.axis2-fake.entrypoints=websecure'
       - 'traefik.http.routers.axis2-fake.rule=(Host(`${SOAP_HOST}`) && PathPrefix(`/axis2/services/`))'
       - 'traefik.http.routers.axis2-fake.priority=10000'
-      - "traefik.http.routers.axis2-fake.tls.certresolver=myresolver"
+      - "traefik.http.routers.axis2-fake.tls.certresolver=letsencrypt"
       - 'traefik.http.services.axis2-fake.loadbalancer.server.port=8080'
 
   couchdb:
@@ -117,7 +116,7 @@ services:
       - "traefik.http.routers.rookies.entrypoints=websecure"
       - "traefik.http.routers.rookies.rule=Host(`${ROOKIES_HOST}`)"
       - "traefik.http.services.rookies.loadbalancer.server.port=3000"
-      - "traefik.http.routers.rookies.tls.certresolver=myresolver"
+      - "traefik.http.routers.rookies.tls.certresolver=letsencrypt"
       - "com.centurylinklabs.watchtower.enable=true"
     restart: always
 
