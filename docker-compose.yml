@@ -3,8 +3,8 @@ services:
   traefik:
     image: docker.io/traefik:3.3
     command:
-      - '--api.dashboard=true'
-      - '--api.insecure=true'
+      - '--api.dashboard=false'
+      - '--api.insecure=false'
       - '--certificatesresolvers.letsencrypt.acme.email=postmaster@e-hacking.de'
       - '--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web'
       - '--certificatesresolvers.letsencrypt.acme.httpchallenge=true'
