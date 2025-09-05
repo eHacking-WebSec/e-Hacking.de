@@ -63,6 +63,9 @@ services:
     image: mendhak/http-https-echo:31
     depends_on:
       - traefik
+    expose:
+      - "8080"
+      - "8443"
     networks:
       - ehacking
     expose:
