@@ -39,6 +39,7 @@ services:
       - flags_json-sec.env
       - flags_saml.env
       - flags_soap-sec.env
+      - flags_xml-sec.env
     environment:
       - ATTACKER_URL=https://${ATTACKER_HOST}:${PORT_HTTPS}
       - SP_URL=https://${SP_HOST}:${PORT_HTTPS}
