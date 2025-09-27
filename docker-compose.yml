@@ -37,6 +37,7 @@ services:
     env_file:
       - .env
       - flags_json-sec.env
+      - flags_rest-api-sec.env
       - flags_saml.env
       - flags_soap-sec.env
       - flags_xml-sec.env
