@@ -1,7 +1,7 @@
 services:
 
   traefik:
-    image: docker.io/traefik:3.3
+    image: docker.io/traefik:3.4
     command:
       - '--api.dashboard=false'
       - '--api.insecure=false'
@@ -10,7 +10,9 @@ services:
       - '--certificatesresolvers.letsencrypt.acme.httpchallenge=true'
       - '--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json'
       - '--entrypoints.web.address=:${PORT_HTTP}'
+      - '--entrypoints.web.http.sanitizePath=false'
       - '--entrypoints.websecure.address=:${PORT_HTTPS}'
+      - '--entrypoints.websecure.http.sanitizePath=false'
       - '--entrypoints.websecure.http.tls=true'
       - '--providers.docker=true'
       #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
