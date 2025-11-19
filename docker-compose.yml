@@ -51,23 +51,11 @@ services:
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
     labels:
       - 'traefik.enable=true'
-      
-      # HTTP Router for regular Hosts
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
-      - 'traefik.http.routers.all-in-one.rule=(Host(`${HOST1}`) || Host(`${HOST2}`) || Host(`${IDP_HOST}`) || Host(`${JSON_HOST}`) || Host(`${RS_HOST}`) || Host(`${SOAP_HOST}`) || Host(`${SP_HOST}`) || Host(`${SPA_HOST}`) || Host(`${XML_HOST}`) || Host(`${WEBSEC_HOST}`) )'
+      - 'traefik.http.routers.all-in-one.rule=(Host(`${HOST1}`) || Host(`${HOST2}`) || Host(`${IDP_HOST}`) || Host(`${JSON_HOST}`) || Host(`${REST_HOST}`) || Host(`${RS_HOST}`) || Host(`${SOAP_HOST}`) || Host(`${SP_HOST}`) || Host(`${SPA_HOST}`) || Host(`${XML_HOST}`) || Host(`${WEBSEC_HOST}`) )'
       - 'traefik.http.routers.all-in-one.priority=1'
       - 'traefik.http.services.all-in-one.loadbalancer.server.port=80'
       - 'traefik.http.routers.all-in-one.tls.certresolver=letsencrypt'
-      
-      # TCP Router for REST_HOST (No HTTP-Layer Processing)
-      - 'traefik.tcp.routers.rest-passthrough.rule=HostSNI(`${REST_HOST}`)'
-      - 'traefik.tcp.routers.rest-passthrough.entrypoints=websecure'
-      - 'traefik.tcp.routers.rest-passthrough.tls=true'
-      - 'traefik.tcp.routers.rest-passthrough.tls.certresolver=letsencrypt'
-      - 'traefik.tcp.routers.rest-passthrough.tls.passthrough=false'
-      - 'traefik.tcp.routers.rest-passthrough.service=rest-tcp-service'
-      - 'traefik.tcp.services.rest-tcp-service.loadbalancer.server.port=80'
-      
       - 'com.centurylinklabs.watchtower.enable=true'
     restart: always
 
