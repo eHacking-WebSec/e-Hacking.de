@@ -14,11 +14,13 @@ services:
       - '--entrypoints.websecure.address=:${PORT_HTTPS}'
       - '--entrypoints.websecure.http.sanitizePath=false'
       - '--entrypoints.websecure.http.tls=true'
+      - '--entrypoints.tcpsecure.address=:${PORT_TCP}'  # ← Separater Port für TCP
       - '--providers.docker=true'
       #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
     ports:
       - "${PORT_HTTP}:${PORT_HTTP}"
       - "${PORT_HTTPS}:${PORT_HTTPS}"
+      - "${PORT_TCP}:${PORT_TCP}"
     volumes:
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -57,6 +59,13 @@ services:
       - 'traefik.http.services.all-in-one.loadbalancer.server.port=80'
       - 'traefik.http.routers.all-in-one.tls.certresolver=letsencrypt'
       - 'com.centurylinklabs.watchtower.enable=true'
+      # TCP Router (REST_HOST only → use this for the REST challenges)
+      - 'traefik.tcp.routers.rest-passthrough.rule=HostSNI(`${REST_HOST}`)'
+      - 'traefik.tcp.routers.rest-passthrough.entrypoints=tcpsecure'
+      - 'traefik.tcp.routers.rest-passthrough.tls=true'
+      - 'traefik.tcp.routers.rest-passthrough.tls.certresolver=letsencrypt'
+      - 'traefik.tcp.routers.rest-passthrough.service=rest-tcp-service'
+      - 'traefik.tcp.services.rest-tcp-service.loadbalancer.server.port=80'
     restart: always
 
   attacker:
