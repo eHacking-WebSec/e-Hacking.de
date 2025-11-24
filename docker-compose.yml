@@ -51,6 +51,9 @@ services:
       - SPA_URL=https://${SPA_HOST}:${PORT_HTTPS}
       - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
+    volumes:
+      - "./flags_xxe1.env:/etc/flags_xxe1.env:ro"
+      - "./flags_xxe2.env:/etc/flags_xxe2.env:ro"
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
