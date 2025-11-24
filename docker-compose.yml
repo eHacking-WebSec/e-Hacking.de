@@ -52,8 +52,8 @@ services:
       - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
       - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
     volumes:
-      - "./flags_xxe1.env:/etc/flags_xxe1.env:ro"
-      - "./flags_xxe2.env:/etc/flags_xxe2.env:ro"
+      - "./flag_xxe1.txt:/etc/flag_xxe1.txt:ro"
+      - "./flag_xxe2.txt:/etc/flag_xxe2.txt:ro"
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
