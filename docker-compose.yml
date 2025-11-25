@@ -54,6 +54,7 @@ services:
     volumes:
       - "./flag_xxe1.txt:/etc/flag_xxe1.txt:ro"
       - "./flag_xxe2.txt:/etc/flag_xxe2.txt:ro"
+      - "./flag_xslt1.xml:/etc/flag_xslt1.xml:ro"
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.all-in-one.entrypoints=websecure'
