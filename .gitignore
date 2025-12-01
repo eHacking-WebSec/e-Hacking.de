@@ -1,3 +1,4 @@
 flags_*.env
+flag_*.xml
 flag_*.txt
 letsencrypt/

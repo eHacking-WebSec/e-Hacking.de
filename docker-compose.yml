@@ -25,82 +25,235 @@ services:
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     restart: always
+    networks:
+      - ehacking
     # labels:
       # - 'traefik.http.routers.dashboard.rule=(PathPrefix(`/api`) || PathPrefix(`/dashboard`))'
       # - 'traefik.http.routers.dashboard.priority=99999'
       # - 'traefik.http.routers.dashboard.service=api@internal'
 
-  app:
-    image: ghcr.io/ehacking-websec/ehacking/ehacking:${DOCKER_TAG}
-    pull_policy: always
+# root module: lading page with all available modules for selection
+  root:
+    image: ${DOCKER_REGISTRY}/root:latest
     depends_on:
-      - traefik
-      - couchdb
-      - axis2-flag
-      - axis2-fake
+      traefik:
+        required: true
+        condition: service_started
+    env_file:
+      - .env
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.root.entrypoints=websecure'
+      - 'traefik.http.routers.root.rule=(Host(`${HOST1}`) || Host(`${HOST2}`))'
+      - 'traefik.http.routers.root.tls=true'
+      - 'traefik.http.routers.root.tls.certresolver=stepca'
+      - 'traefik.http.routers.root.priority=1'
+      - 'traefik.http.services.root.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+
+# JSON module
+  json-sec:
+    image: ${DOCKER_REGISTRY}/json-sec
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
     env_file:
       - .env
       - flags_json-sec.env
-      - flags_rest-api-sec.env
-      - flags_saml.env
-      - flags_soap-sec.env
-      - flags_xml-sec.env
-    environment:
-      - ATTACKER_URL=https://${ATTACKER_HOST}:${PORT_HTTPS}
-      - SP_URL=https://${SP_HOST}:${PORT_HTTPS}
-      - SPA_URL=https://${SPA_HOST}:${PORT_HTTPS}
-      - IDP_URL=https://${IDP_HOST}:${PORT_HTTPS}
-      - RS_URL=https://${RS_HOST}:${PORT_HTTPS}
-    volumes:
-      - "./flag_xxe1.txt:/etc/flag_xxe1.txt:ro"
-      - "./flag_xxe2.txt:/etc/flag_xxe2.txt:ro"
-      - "./flag_xslt1.xml:/etc/flag_xslt1.xml:ro"
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.routers.all-in-one.entrypoints=websecure'
-      - 'traefik.http.routers.all-in-one.rule=(Host(`${HOST1}`) || Host(`${HOST2}`) || Host(`${IDP_HOST}`) || Host(`${JSON_HOST}`) || Host(`${REST_HOST}`) || Host(`${RS_HOST}`) || Host(`${SOAP_HOST}`) || Host(`${SP_HOST}`) || Host(`${SPA_HOST}`) || Host(`${XML_HOST}`) || Host(`${WEBSEC_HOST}`) )'
-      - 'traefik.http.routers.all-in-one.priority=1'
-      - 'traefik.http.services.all-in-one.loadbalancer.server.port=80'
-      - 'traefik.http.routers.all-in-one.tls.certresolver=letsencrypt'
-      - 'com.centurylinklabs.watchtower.enable=true'
-      # TCP Router (REST_HOST only → use this for the REST challenges)
-      - 'traefik.tcp.routers.rest-passthrough.rule=HostSNI(`${REST_HOST}`)'
-      - 'traefik.tcp.routers.rest-passthrough.entrypoints=tcpsecure'
-      - 'traefik.tcp.routers.rest-passthrough.tls=true'
-      - 'traefik.tcp.routers.rest-passthrough.tls.certresolver=letsencrypt'
-      - 'traefik.tcp.routers.rest-passthrough.service=rest-tcp-service'
-      - 'traefik.tcp.services.rest-tcp-service.loadbalancer.server.port=80'
-    restart: always
+      - 'traefik.http.routers.json-sec.entrypoints=websecure'
+      - 'traefik.http.routers.json-sec.rule=(Host(`${JSON_HOST}`) && PathPrefix(`${BASE_PATH_JSON}`))'
+      - 'traefik.http.routers.json-sec.tls=true'
+      - 'traefik.http.routers.json-sec.tls.certresolver=stepca'
+      - 'traefik.http.services.json-sec.loadbalancer.server.port=80'
+    networks:
+      - ehacking
 
-  attacker:
-    image: mendhak/http-https-echo:31
+# OpenID Connect module
+  oidc:
+    image: ${DOCKER_REGISTRY}/oidc
     depends_on:
-      - traefik
-    expose:
-      - "8080"
-      - "8443"
+      traefik:
+        required: true
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      - ATTACKER_URL=https://${ATTACKER_HOST}:${PORT_HTTPS}
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.oidc.entrypoints=websecure'
+      - 'traefik.http.routers.oidc.rule=( (Host(`${SP_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_SP}`)) || (Host(`${SPA_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_SP}`)) || (Host(`${IDP_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_IDP}`)) || (Host(`${RS_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_IDP}`)) )'
+      - 'traefik.http.routers.oidc.tls=true'
+      - 'traefik.http.routers.oidc.tls.certresolver=stepca'
+      - 'traefik.http.services.oidc.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+    links:
+      - traefik:${SP_HOST}
+      - traefik:${SPA_HOST}
+      - traefik:${IDP_HOST}
+      - traefik:${RS_HOST}
+
+# REST module
+  rest-api-sec:
+    image: ${DOCKER_REGISTRY}/rest-api-sec
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    ports:
+      - 30003:8787
+    env_file:
+      - .env
+      - flags_rest-api-sec.env
+    environment:
+      # CTF Flags for REST attacks
+      - FLAG_REST_AUTH1=${FLAG_REST_AUTH1:-FLAG{rest_auth1_dummy}}
+      - FLAG_REST_AUTH2=${FLAG_REST_AUTH2:-FLAG{rest_auth2_dummy}}
+      - FLAG_REST_AUTH3=${FLAG_REST_AUTH3:-FLAG{rest_auth3_dummy}}
+      - FLAG_REST_AUTH4=${FLAG_REST_AUTH4:-FLAG{rest_auth4_dummy}}
+      - FLAG_REST_AUTH5=${FLAG_REST_AUTH5:-FLAG{rest_auth5_dummy}}
+      - FLAG_REST_AUTH6=${FLAG_REST_AUTH6:-FLAG{rest_auth6_dummy}}
+      - FLAG_REST_AUTH7=${FLAG_REST_AUTH7:-FLAG{rest_auth7_dummy}}
+      - FLAG_REST_AUTH8=${FLAG_REST_AUTH8:-FLAG{rest_auth8_dummy}}
+      - FLAG_REST_AUTH9=${FLAG_REST_AUTH9:-FLAG{rest_auth9_dummy}}
+      - FLAG_REST_BOPLA_USERAPI=${FLAG_REST_BOPLA_USERAPI:-FLAG{rest_bopla_userapi_dummy}}
+      - FLAG_REST_BOPLA_REPORTSAPI1=${FLAG_REST_BOPLA_REPORTSAPI1:-FLAG{rest_bopla_reportsapi_dummy}}
+      - FLAG_REST_BOPLA_REPORTSAPI2=${FLAG_REST_BOPLA_REPORTSAPI2:-FLAG{rest_bopla_reportsapi2_dummy}}
+      - FLAG_REST_BOPLA_SHOPAPI=${FLAG_REST_BOPLA_SHOPAPI:-FLAG{rest_bopla_shopapi_dummy}}
+      - FLAG_REST_BFLA_SHOPAPI1=${FLAG_REST_BFLA_SHOPAPI1:-FLAG{rest_bfla_shopapi_dummy}}
+      - FLAG_REST_BFLA_SHOPAPI2=${FLAG_REST_BFLA_SHOPAPI2:-FLAG{rest_bfla_shopapi2_dummy}}
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.rest-api-sec.entrypoints=websecure'
+      - 'traefik.http.routers.rest-api-sec.rule=(Host(`${REST_HOST}`) && PathPrefix(`${BASE_PATH_REST}`))'
+      - 'traefik.http.routers.rest-api-sec.tls=true'
+      - 'traefik.http.routers.rest-api-sec.tls.certresolver=stepca'
+      - 'traefik.http.services.rest-api-sec.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+
+  couchdb:
+    image: docker.io/couchdb:latest
+    environment:
+      COUCHDB_USER: "root"
+      COUCHDB_PASSWORD: "super_secure"
+    restart: always
+    networks:
+      - ehacking
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.attacker.entrypoints=websecure"
-      - "traefik.http.routers.attacker.rule=( Host(`${ATTACKER_HOST}`) || HostRegexp(`^.+\\.${ATTACKER_HOST}$`) )"
-      - 'traefik.http.routers.attacker.tls.certresolver=letsencrypt'
-      - "traefik.http.services.attacker.loadbalancer.server.port=8080"
+      - "com.centurylinklabs.watchtower.enable=true"
 
+# SAML module
+  saml:
+    image: ${DOCKER_REGISTRY}/saml
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    ports:
+      - 30004:8787
+    env_file:
+      - .env
+      - flags_saml.env
+    environment:
+      # CTF Flags for SAML attacks
+      - FLAG_SAML_REPLAY1=${FLAG_SAML_REPLAY1:-FLAG{saml_replay1_dummy}}
+      - FLAG_SAML_REPLAY2=${FLAG_SAML_REPLAY2:-FLAG{saml_replay2_dummy}}
+      - FLAG_SAML_REPLAY3=${FLAG_SAML_REPLAY3:-FLAG{saml_replay3_dummy}}
+      - FLAG_SAML_REPLAY4=${FLAG_SAML_REPLAY4:-FLAG{saml_replay4_dummy}}
+      - FLAG_SAML_TRC1=${FLAG_SAML_TRC1:-FLAG{saml_trc1_dummy}}
+      - FLAG_SAML_TRC2=${FLAG_SAML_TRC2:-FLAG{saml_trc2_dummy}}
+      - FLAG_SAML_TRC3=${FLAG_SAML_TRC3:-FLAG{saml_trc3_dummy}}
+      - FLAG_SAML_SIGBYPASS1=${FLAG_SAML_SIGBYPASS1:-FLAG{saml_sigbypass1_dummy}}
+      - FLAG_SAML_SIGBYPASS2=${FLAG_SAML_SIGBYPASS2:-FLAG{saml_sigbypass2_dummy}}
+      - FLAG_SAML_NODE_SPLITTING=${FLAG_SAML_NODE_SPLITTING:-FLAG{saml_node_splitting_dummy}}
+      - FLAG_SAML_XSW1=${FLAG_SAML_XSW1:-FLAG{saml_xsw1_dummy}}
+      - FLAG_SAML_XSW2=${FLAG_SAML_XSW2:-FLAG{saml_xsw2_dummy}}
+      - FLAG_SAML_XSW3=${FLAG_SAML_XSW3:-FLAG{saml_xsw3_dummy}}
+      - FLAG_SAML_XSW4=${FLAG_SAML_XSW4:-FLAG{saml_xsw4_dummy}}
+      - FLAG_SAML_HOK_VERIFIER12=${FLAG_SAML_HOK_VERIFIER12:-FLAG{saml_hok_v12_dummy}}
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.saml.entrypoints=websecure'
+      - 'traefik.http.routers.saml.rule= (Host(`${SP_HOST}`) && PathPrefix(`/sp`)) || (Host(`${IDP_HOST}`) && PathPrefix(`/idp`))'
+      - 'traefik.http.routers.saml.tls=true'
+      - 'traefik.http.routers.saml.tls.certresolver=stepca'
+      - 'traefik.http.services.saml.loadbalancer.server.port=80'
+    extra_hosts:
+      # - "${SP_HOST}:127.0.0.1"
+      # - "${IDP_HOST}:127.0.0.1"
+      - "${ATTACKER_HOST}:127.0.0.1"
+    networks:
+      - ehacking
+    links:
+      - traefik:${SP_HOST}
+      - traefik:${IDP_HOST}
+
+# SOAP module:
+  soap-sec:
+    image: ${DOCKER_REGISTRY}/soap-sec
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+      axis2-flag:
+        required: true
+        condition: service_started
+      axis2-fake:
+        required: true
+        condition: service_started
+    ports:
+      - 30007:8787
+    env_file:
+      - .env
+      - flags_soap-sec.env
+    environment:
+      - FLAG_SOAP_AUTH_WSS=${FLAG_SOAP_AUTH_WSS:-FLAG{soap_auth_secret_dummy}}
+      - FLAG_SOAP_AUTH_ADMIN1=${FLAG_SOAP_AUTH_ADMIN1:-FLAG{soap_auth_vuln_1_secret_dummy}}
+      - FLAG_SOAP_AUTH_ADMIN2=${FLAG_SOAP_AUTH_ADMIN2:-FLAG{soap_auth_vuln_2_secret_dummy}}
+      - FLAG_SOAP_MEALDELIVERY_1=${FLAG_SOAP_MEALDELIVERY_1:-FLAG{soap_mealdelivery_flag1_dummy}}
+      - FLAG_SOAP_MEALDELIVERY_2=${FLAG_SOAP_MEALDELIVERY_2:-FLAG{soap_mealdelivery_flag2_dummy}}
+      - FLAG_SOAP_MEALDELIVERY_3=${FLAG_SOAP_MEALDELIVERY_3:-FLAG{soap_mealdelivery_flag3_dummy}}
+      - FLAG_SOAP_XSW1=${FLAG_SOAP_XSW1:-FLAG{soap_xsw1_dummy}}
+      - FLAG_SOAP_XSW2=${FLAG_SOAP_XSW2:-FLAG{soap_xsw2_dummy}}
+      - FLAG_SOAP_XSW3=${FLAG_SOAP_XSW3:-FLAG{soap_xsw3_dummy}}
+      - FLAG_SOAP_XSW4=${FLAG_SOAP_XSW4:-FLAG{soap_xsw4_dummy}}
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.soap-sec.entrypoints=websecure'
+      - 'traefik.http.routers.soap-sec.rule=(Host(`${SOAP_HOST}`))'
+      - 'traefik.http.routers.soap-sec.tls=true'
+      - 'traefik.http.routers.soap-sec.tls.certresolver=stepca'
+      - 'traefik.http.services.soap-sec.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+      - soap-internal
+    
+# SOAP module: real flag service (private network only)
   axis2-flag:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
     env_file:
       - flags_axis2-flag.env
+    networks:
+      - soap-internal
     expose:
       - "8080"
-    develop:
-      watch:
-        - action: rebuild
-          path: ./soap-sec/internal-axis2-services
 
+# SOAP module: fake-flag service (publicly available)
   axis2-fake:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
     depends_on:
-      - traefik
+      traefik:
+        required: true
+        condition: service_started
+    networks:
+      - ehacking
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.axis2-fake.entrypoints=websecure'
@@ -109,15 +262,81 @@ services:
       - "traefik.http.routers.axis2-fake.tls.certresolver=letsencrypt"
       - 'traefik.http.services.axis2-fake.loadbalancer.server.port=8080'
 
-  couchdb:
-    image: docker.io/couchdb:latest
+
+# Web security module
+  web-sec:
+    image: ${DOCKER_REGISTRY}/web-sec
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    env_file:
+      - .env
+    # TODO: Check if we really need these (since they are in .env)
+    # environment:
+    #   SP_HOST: ${SP_HOST}
+    #   IDP_HOST: ${IDP_HOST}
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.web-sec.entrypoints=websecure'
+      - 'traefik.http.routers.web-sec.rule=(Host(`${WEBSEC_HOST}`) && PathPrefix(`${BASE_PATH_WEBSEC}`))'
+      - 'traefik.http.routers.web-sec.tls=true'
+      - 'traefik.http.routers.web-sec.tls.certresolver=stepca'
+      - 'traefik.http.services.web-sec.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+
+# XML module
+  xml-sec:
+    image: ${DOCKER_REGISTRY}/xml-sec
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    env_file:
+      - .env
+      - flags_xml-sec.env
     environment:
-      COUCHDB_USER: "root"
-      COUCHDB_PASSWORD: "super_secure"
-    restart: always
+      # CTF Flags for XML XSW attacks
+      - FLAG_XML_XSW_VERIFIER1=${FLAG_XML_XSW_VERIFIER1:-FLAG{xml_xsw_verifier1_dummy}}
+      - FLAG_XML_XSW_VERIFIER2=${FLAG_XML_XSW_VERIFIER2:-FLAG{xml_xsw_verifier2_dummy}}
+      - FLAG_XML_XSW_VERIFIER3=${FLAG_XML_XSW_VERIFIER3:-FLAG{xml_xsw_verifier3_dummy}}
+      - FLAG_XML_XSW_VERIFIER4=${FLAG_XML_XSW_VERIFIER4:-FLAG{xml_xsw_verifier4_dummy}}
+      # CTF Flags for XPath exercises
+      - FLAG_XML_XPATH1_ELEMENT=${FLAG_XML_XPATH1_ELEMENT:-FLAG{xml_xpath1_element_dummy}}
+      - FLAG_XML_XPATH2_TEXT=${FLAG_XML_XPATH2_TEXT:-FLAG{xml_xpath2_text_dummy}}
+      - FLAG_XML_XPATH3_ATTRIBUTE=${FLAG_XML_XPATH3_ATTRIBUTE:-FLAG{xml_xpath3_attribute_dummy}}
+      - FLAG_XML_XPATH4=${FLAG_XML_XPATH4:-FLAG{xml_xpath4_dummy}}
+      - FLAG_XML_XPATH5=${FLAG_XML_XPATH5:-FLAG{xml_xpath5_dummy}}
+      - FLAG_XML_XPATH6_MASTER=${FLAG_XML_XPATH6_MASTER:-FLAG{xml_xpath6_master_dummy}}
+    volumes:
+      - "./flag_xxe1.txt:/etc/flag_xxe1.txt:ro"
+      - "./flag_xxe2.txt:/etc/flag_xxe2.txt:ro"
+      - "./flag_xslt1.xml:/etc/flag_xslt1.xml:ro"
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.xml-sec.entrypoints=websecure'
+      - 'traefik.http.routers.xml-sec.rule=(Host(`${XML_HOST}`) && PathPrefix(`/xml-sec`))'
+      - 'traefik.http.routers.xml-sec.tls=true'
+      - 'traefik.http.routers.xml-sec.tls.certresolver=stepca'
+      - 'traefik.http.services.xml-sec.loadbalancer.server.port=80'
+    networks:
+      - ehacking
+  attacker:
+    image: mendhak/http-https-echo:31
+    depends_on:
+      - traefik
+    expose:
+      - "8080"
+      - "8443"
+    networks:
+      - ehacking
     labels:
       - "traefik.enable=true"
-      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.attacker.entrypoints=websecure"
+      - "traefik.http.routers.attacker.rule=( Host(`${ATTACKER_HOST}`) || HostRegexp(`^.+\\.${ATTACKER_HOST}$`) )"
+      - 'traefik.http.routers.attacker.tls.certresolver=letsencrypt'
+      - "traefik.http.services.attacker.loadbalancer.server.port=8080"
 
   rookies:
     image: ghcr.io/ehacking-websec/rookies:latest
@@ -133,6 +352,8 @@ services:
       - "traefik.http.services.rookies.loadbalancer.server.port=3000"
       - "traefik.http.routers.rookies.tls.certresolver=letsencrypt"
       - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - ehacking
     restart: always
 
   watchtower:
@@ -157,3 +378,7 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: always
+
+networks:
+  ehacking:
+  soap-internal:
