@@ -1,7 +1,7 @@
 services:
 
   traefik:
-    image: docker.io/traefik:3.4
+    image: docker.io/traefik
     command:
       - '--api.dashboard=false'
       - '--api.insecure=false'
