@@ -46,7 +46,7 @@ services:
       - 'traefik.http.routers.root.entrypoints=websecure'
       - 'traefik.http.routers.root.rule=(Host(`${HOST1}`) || Host(`${HOST2}`))'
       - 'traefik.http.routers.root.tls=true'
-      - 'traefik.http.routers.root.tls.certresolver=stepca'
+      - 'traefik.http.routers.root.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.root.priority=1'
       - 'traefik.http.services.root.loadbalancer.server.port=80'
     networks:
@@ -67,7 +67,7 @@ services:
       - 'traefik.http.routers.json-sec.entrypoints=websecure'
       - 'traefik.http.routers.json-sec.rule=(Host(`${JSON_HOST}`) && PathPrefix(`${BASE_PATH_JSON}`))'
       - 'traefik.http.routers.json-sec.tls=true'
-      - 'traefik.http.routers.json-sec.tls.certresolver=stepca'
+      - 'traefik.http.routers.json-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.json-sec.loadbalancer.server.port=80'
     networks:
       - ehacking
@@ -88,7 +88,7 @@ services:
       - 'traefik.http.routers.oidc.entrypoints=websecure'
       - 'traefik.http.routers.oidc.rule=( (Host(`${SP_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_SP}`)) || (Host(`${SPA_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_SP}`)) || (Host(`${IDP_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_IDP}`)) || (Host(`${RS_HOST}`) && PathPrefix(`${BASE_PATH_OIDC_IDP}`)) )'
       - 'traefik.http.routers.oidc.tls=true'
-      - 'traefik.http.routers.oidc.tls.certresolver=stepca'
+      - 'traefik.http.routers.oidc.tls.certresolver=letsencrypt'
       - 'traefik.http.services.oidc.loadbalancer.server.port=80'
     networks:
       - ehacking
@@ -132,7 +132,7 @@ services:
       - 'traefik.http.routers.rest-api-sec.entrypoints=websecure'
       - 'traefik.http.routers.rest-api-sec.rule=(Host(`${REST_HOST}`) && PathPrefix(`${BASE_PATH_REST}`))'
       - 'traefik.http.routers.rest-api-sec.tls=true'
-      - 'traefik.http.routers.rest-api-sec.tls.certresolver=stepca'
+      - 'traefik.http.routers.rest-api-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.rest-api-sec.loadbalancer.server.port=80'
     networks:
       - ehacking
@@ -183,7 +183,7 @@ services:
       - 'traefik.http.routers.saml.entrypoints=websecure'
       - 'traefik.http.routers.saml.rule= (Host(`${SP_HOST}`) && PathPrefix(`/sp`)) || (Host(`${IDP_HOST}`) && PathPrefix(`/idp`))'
       - 'traefik.http.routers.saml.tls=true'
-      - 'traefik.http.routers.saml.tls.certresolver=stepca'
+      - 'traefik.http.routers.saml.tls.certresolver=letsencrypt'
       - 'traefik.http.services.saml.loadbalancer.server.port=80'
     extra_hosts:
       # - "${SP_HOST}:127.0.0.1"
@@ -229,7 +229,7 @@ services:
       - 'traefik.http.routers.soap-sec.entrypoints=websecure'
       - 'traefik.http.routers.soap-sec.rule=(Host(`${SOAP_HOST}`))'
       - 'traefik.http.routers.soap-sec.tls=true'
-      - 'traefik.http.routers.soap-sec.tls.certresolver=stepca'
+      - 'traefik.http.routers.soap-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.soap-sec.loadbalancer.server.port=80'
     networks:
       - ehacking
@@ -281,7 +281,7 @@ services:
       - 'traefik.http.routers.web-sec.entrypoints=websecure'
       - 'traefik.http.routers.web-sec.rule=(Host(`${WEBSEC_HOST}`) && PathPrefix(`${BASE_PATH_WEBSEC}`))'
       - 'traefik.http.routers.web-sec.tls=true'
-      - 'traefik.http.routers.web-sec.tls.certresolver=stepca'
+      - 'traefik.http.routers.web-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.web-sec.loadbalancer.server.port=80'
     networks:
       - ehacking
@@ -318,7 +318,7 @@ services:
       - 'traefik.http.routers.xml-sec.entrypoints=websecure'
       - 'traefik.http.routers.xml-sec.rule=(Host(`${XML_HOST}`) && PathPrefix(`/xml-sec`))'
       - 'traefik.http.routers.xml-sec.tls=true'
-      - 'traefik.http.routers.xml-sec.tls.certresolver=stepca'
+      - 'traefik.http.routers.xml-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.xml-sec.loadbalancer.server.port=80'
     networks:
       - ehacking
