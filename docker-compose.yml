@@ -357,7 +357,7 @@ services:
     restart: always
 
   watchtower:
-    image: docker.io/containrrr/watchtower
+    image: docker.io/nickfedor/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
