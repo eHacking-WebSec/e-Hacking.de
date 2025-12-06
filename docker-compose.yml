@@ -110,23 +110,6 @@ services:
     env_file:
       - .env
       - flags_rest-api-sec.env
-    environment:
-      # CTF Flags for REST attacks
-      - FLAG_REST_AUTH1=${FLAG_REST_AUTH1:-FLAG{rest_auth1_dummy}}
-      - FLAG_REST_AUTH2=${FLAG_REST_AUTH2:-FLAG{rest_auth2_dummy}}
-      - FLAG_REST_AUTH3=${FLAG_REST_AUTH3:-FLAG{rest_auth3_dummy}}
-      - FLAG_REST_AUTH4=${FLAG_REST_AUTH4:-FLAG{rest_auth4_dummy}}
-      - FLAG_REST_AUTH5=${FLAG_REST_AUTH5:-FLAG{rest_auth5_dummy}}
-      - FLAG_REST_AUTH6=${FLAG_REST_AUTH6:-FLAG{rest_auth6_dummy}}
-      - FLAG_REST_AUTH7=${FLAG_REST_AUTH7:-FLAG{rest_auth7_dummy}}
-      - FLAG_REST_AUTH8=${FLAG_REST_AUTH8:-FLAG{rest_auth8_dummy}}
-      - FLAG_REST_AUTH9=${FLAG_REST_AUTH9:-FLAG{rest_auth9_dummy}}
-      - FLAG_REST_BOPLA_USERAPI=${FLAG_REST_BOPLA_USERAPI:-FLAG{rest_bopla_userapi_dummy}}
-      - FLAG_REST_BOPLA_REPORTSAPI1=${FLAG_REST_BOPLA_REPORTSAPI1:-FLAG{rest_bopla_reportsapi_dummy}}
-      - FLAG_REST_BOPLA_REPORTSAPI2=${FLAG_REST_BOPLA_REPORTSAPI2:-FLAG{rest_bopla_reportsapi2_dummy}}
-      - FLAG_REST_BOPLA_SHOPAPI=${FLAG_REST_BOPLA_SHOPAPI:-FLAG{rest_bopla_shopapi_dummy}}
-      - FLAG_REST_BFLA_SHOPAPI1=${FLAG_REST_BFLA_SHOPAPI1:-FLAG{rest_bfla_shopapi_dummy}}
-      - FLAG_REST_BFLA_SHOPAPI2=${FLAG_REST_BFLA_SHOPAPI2:-FLAG{rest_bfla_shopapi2_dummy}}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.rest-api-sec.entrypoints=websecure'
@@ -161,23 +144,6 @@ services:
     env_file:
       - .env
       - flags_saml.env
-    environment:
-      # CTF Flags for SAML attacks
-      - FLAG_SAML_REPLAY1=${FLAG_SAML_REPLAY1:-FLAG{saml_replay1_dummy}}
-      - FLAG_SAML_REPLAY2=${FLAG_SAML_REPLAY2:-FLAG{saml_replay2_dummy}}
-      - FLAG_SAML_REPLAY3=${FLAG_SAML_REPLAY3:-FLAG{saml_replay3_dummy}}
-      - FLAG_SAML_REPLAY4=${FLAG_SAML_REPLAY4:-FLAG{saml_replay4_dummy}}
-      - FLAG_SAML_TRC1=${FLAG_SAML_TRC1:-FLAG{saml_trc1_dummy}}
-      - FLAG_SAML_TRC2=${FLAG_SAML_TRC2:-FLAG{saml_trc2_dummy}}
-      - FLAG_SAML_TRC3=${FLAG_SAML_TRC3:-FLAG{saml_trc3_dummy}}
-      - FLAG_SAML_SIGBYPASS1=${FLAG_SAML_SIGBYPASS1:-FLAG{saml_sigbypass1_dummy}}
-      - FLAG_SAML_SIGBYPASS2=${FLAG_SAML_SIGBYPASS2:-FLAG{saml_sigbypass2_dummy}}
-      - FLAG_SAML_NODE_SPLITTING=${FLAG_SAML_NODE_SPLITTING:-FLAG{saml_node_splitting_dummy}}
-      - FLAG_SAML_XSW1=${FLAG_SAML_XSW1:-FLAG{saml_xsw1_dummy}}
-      - FLAG_SAML_XSW2=${FLAG_SAML_XSW2:-FLAG{saml_xsw2_dummy}}
-      - FLAG_SAML_XSW3=${FLAG_SAML_XSW3:-FLAG{saml_xsw3_dummy}}
-      - FLAG_SAML_XSW4=${FLAG_SAML_XSW4:-FLAG{saml_xsw4_dummy}}
-      - FLAG_SAML_HOK_VERIFIER12=${FLAG_SAML_HOK_VERIFIER12:-FLAG{saml_hok_v12_dummy}}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.saml.entrypoints=websecure'
@@ -213,17 +179,6 @@ services:
     env_file:
       - .env
       - flags_soap-sec.env
-    environment:
-      - FLAG_SOAP_AUTH_WSS=${FLAG_SOAP_AUTH_WSS:-FLAG{soap_auth_secret_dummy}}
-      - FLAG_SOAP_AUTH_ADMIN1=${FLAG_SOAP_AUTH_ADMIN1:-FLAG{soap_auth_vuln_1_secret_dummy}}
-      - FLAG_SOAP_AUTH_ADMIN2=${FLAG_SOAP_AUTH_ADMIN2:-FLAG{soap_auth_vuln_2_secret_dummy}}
-      - FLAG_SOAP_MEALDELIVERY_1=${FLAG_SOAP_MEALDELIVERY_1:-FLAG{soap_mealdelivery_flag1_dummy}}
-      - FLAG_SOAP_MEALDELIVERY_2=${FLAG_SOAP_MEALDELIVERY_2:-FLAG{soap_mealdelivery_flag2_dummy}}
-      - FLAG_SOAP_MEALDELIVERY_3=${FLAG_SOAP_MEALDELIVERY_3:-FLAG{soap_mealdelivery_flag3_dummy}}
-      - FLAG_SOAP_XSW1=${FLAG_SOAP_XSW1:-FLAG{soap_xsw1_dummy}}
-      - FLAG_SOAP_XSW2=${FLAG_SOAP_XSW2:-FLAG{soap_xsw2_dummy}}
-      - FLAG_SOAP_XSW3=${FLAG_SOAP_XSW3:-FLAG{soap_xsw3_dummy}}
-      - FLAG_SOAP_XSW4=${FLAG_SOAP_XSW4:-FLAG{soap_xsw4_dummy}}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.soap-sec.entrypoints=websecure'
@@ -296,19 +251,6 @@ services:
     env_file:
       - .env
       - flags_xml-sec.env
-    environment:
-      # CTF Flags for XML XSW attacks
-      - FLAG_XML_XSW_VERIFIER1=${FLAG_XML_XSW_VERIFIER1:-FLAG{xml_xsw_verifier1_dummy}}
-      - FLAG_XML_XSW_VERIFIER2=${FLAG_XML_XSW_VERIFIER2:-FLAG{xml_xsw_verifier2_dummy}}
-      - FLAG_XML_XSW_VERIFIER3=${FLAG_XML_XSW_VERIFIER3:-FLAG{xml_xsw_verifier3_dummy}}
-      - FLAG_XML_XSW_VERIFIER4=${FLAG_XML_XSW_VERIFIER4:-FLAG{xml_xsw_verifier4_dummy}}
-      # CTF Flags for XPath exercises
-      - FLAG_XML_XPATH1_ELEMENT=${FLAG_XML_XPATH1_ELEMENT:-FLAG{xml_xpath1_element_dummy}}
-      - FLAG_XML_XPATH2_TEXT=${FLAG_XML_XPATH2_TEXT:-FLAG{xml_xpath2_text_dummy}}
-      - FLAG_XML_XPATH3_ATTRIBUTE=${FLAG_XML_XPATH3_ATTRIBUTE:-FLAG{xml_xpath3_attribute_dummy}}
-      - FLAG_XML_XPATH4=${FLAG_XML_XPATH4:-FLAG{xml_xpath4_dummy}}
-      - FLAG_XML_XPATH5=${FLAG_XML_XPATH5:-FLAG{xml_xpath5_dummy}}
-      - FLAG_XML_XPATH6_MASTER=${FLAG_XML_XPATH6_MASTER:-FLAG{xml_xpath6_master_dummy}}
     volumes:
       - "./flag_xxe1.txt:/etc/flag_xxe1.txt:ro"
       - "./flag_xxe2.txt:/etc/flag_xxe2.txt:ro"
