@@ -189,7 +189,7 @@ services:
     networks:
       - ehacking
       - soap-internal
-    
+
 # SOAP module: real flag service (private network only)
   axis2-flag:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
@@ -298,6 +298,42 @@ services:
       - ehacking
     restart: always
 
+  # Passkeys
+  passkeys-app:
+    image: ghcr.io/ehacking-websec/fun-with-flags:latest
+    restart: unless-stopped
+    pull_policy: always
+    networks:
+      - ehacking
+    depends_on:
+      - traefik
+      - passkeys-mongo
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.passkeys.entrypoints=websecure"
+      - "traefik.http.routers.passkeys.rule=Host(`${PASSKEYS_HOST}`)"
+      - "traefik.http.services.passkeys.loadbalancer.server.port=3000"
+      - "traefik.http.routers.passkeys.tls.certresolver=letsencrypt"
+      - "com.centurylinklabs.watchtower.enable=true"
+    volumes:
+      - passkeys-instance-data:/app/data/instances
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${PASSKEYS_SESSION_SECRET}
+      - RP_ID=${PASSKEYS_RP_ID}
+      - ORIGIN=${PASSKEYS_ORIGIN}
+      - USE_MONGO=true
+      - MONGO_URI=mongodb://passkeys-mongo:27017/funwithflags
+
+  passkeys-mongo:
+    image: mongo:4
+    restart: unless-stopped
+    networks:
+      - ehacking
+    volumes:
+      - passkeys-mongo-data:/data/db
+
+  # Watchtower
   watchtower:
     image: docker.io/nickfedor/watchtower
     volumes:
@@ -324,3 +360,7 @@ services:
 networks:
   ehacking:
   soap-internal:
+
+volumes:
+  passkeys-instance-data:
+  passkeys-mongo-data:
