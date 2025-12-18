@@ -24,7 +24,7 @@ services:
     volumes:
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    restart: always
+    restart: unless-stopped
     networks:
       - ehacking
     # labels:
@@ -49,6 +49,7 @@ services:
       - 'traefik.http.routers.root.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.root.priority=1'
       - 'traefik.http.services.root.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
 
@@ -69,6 +70,7 @@ services:
       - 'traefik.http.routers.json-sec.tls=true'
       - 'traefik.http.routers.json-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.json-sec.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
 
@@ -90,6 +92,7 @@ services:
       - 'traefik.http.routers.oidc.tls=true'
       - 'traefik.http.routers.oidc.tls.certresolver=letsencrypt'
       - 'traefik.http.services.oidc.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
     links:
@@ -117,6 +120,7 @@ services:
       - 'traefik.http.routers.rest-api-sec.tls=true'
       - 'traefik.http.routers.rest-api-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.rest-api-sec.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
 
@@ -125,7 +129,7 @@ services:
     environment:
       COUCHDB_USER: "root"
       COUCHDB_PASSWORD: "super_secure"
-    restart: always
+    restart: unless-stopped
     networks:
       - ehacking
     labels:
@@ -155,6 +159,7 @@ services:
       # - "${SP_HOST}:127.0.0.1"
       # - "${IDP_HOST}:127.0.0.1"
       - "${ATTACKER_HOST}:127.0.0.1"
+    restart: unless-stopped
     networks:
       - ehacking
     links:
@@ -186,6 +191,7 @@ services:
       - 'traefik.http.routers.soap-sec.tls=true'
       - 'traefik.http.routers.soap-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.soap-sec.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
       - soap-internal
@@ -195,6 +201,7 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
     env_file:
       - flags_axis2-flag.env
+    restart: unless-stopped
     networks:
       - soap-internal
     expose:
@@ -207,6 +214,7 @@ services:
       traefik:
         required: true
         condition: service_started
+    restart: unless-stopped
     networks:
       - ehacking
     labels:
@@ -238,6 +246,7 @@ services:
       - 'traefik.http.routers.web-sec.tls=true'
       - 'traefik.http.routers.web-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.web-sec.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
 
@@ -262,6 +271,7 @@ services:
       - 'traefik.http.routers.xml-sec.tls=true'
       - 'traefik.http.routers.xml-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.xml-sec.loadbalancer.server.port=80'
+    restart: unless-stopped
     networks:
       - ehacking
   attacker:
@@ -271,6 +281,7 @@ services:
     expose:
       - "8080"
       - "8443"
+    restart: unless-stopped
     networks:
       - ehacking
     labels:
@@ -294,9 +305,9 @@ services:
       - "traefik.http.services.rookies.loadbalancer.server.port=3000"
       - "traefik.http.routers.rookies.tls.certresolver=letsencrypt"
       - "com.centurylinklabs.watchtower.enable=true"
+    restart: unless-stopped
     networks:
       - ehacking
-    restart: always
 
   # Passkeys
   passkeys-app:
@@ -355,7 +366,7 @@ services:
       - WATCHTOWER_SCHEDULE=0 0 7 * * * # every day on 7am
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    restart: always
+    restart: unless-stopped
 
 networks:
   ehacking:
