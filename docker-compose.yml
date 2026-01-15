@@ -311,7 +311,7 @@ services:
 
   # Passkeys
   passkeys-app:
-    image: ghcr.io/ehacking-websec/fun-with-flags:latest
+    image: ghcr.io/ehacking-websec/fun-with-flags-and-passkeys:latest
     restart: on-failure
     pull_policy: always
     networks:
