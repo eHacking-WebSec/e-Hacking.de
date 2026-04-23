@@ -468,7 +468,7 @@ services:
       - "traefik.enable=true"
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.http.routers.recruiting-instructor.entrypoints=websecure"
-      - "traefik.http.routers.recruiting-instructor.rule=Host(`${BASICAUTH_USERS}`)"
+      - "traefik.http.routers.recruiting-instructor.rule=Host(`${RECRUITING_INSTRUCTOR_HOST}`)"
       - "traefik.http.routers.recruiting-instructor.tls=true"
       - "traefik.http.routers.recruiting-instructor.tls.certresolver=letsencrypt"
       - "traefik.http.routers.recruiting-instructor.middlewares=basicauth"
