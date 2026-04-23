@@ -3,3 +3,5 @@ flag_*.xml
 flag_*.txt
 letsencrypt/
 .envrc
+cloudflare.env
+auth.env

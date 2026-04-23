@@ -3,12 +3,13 @@ services:
   traefik:
     image: docker.io/traefik
     command:
-      - '--api.dashboard=false'
+      - '--api.dashboard=true'
       - '--api.insecure=false'
       - '--certificatesresolvers.letsencrypt.acme.email=postmaster@e-hacking.de'
       - '--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json'
-      - '--certificatesresolvers.letsencrypt.acme.httpchallenge=true'
-      - '--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web'
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge=true'
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare'
+      - '--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53'
       - '--entrypoints.web.address=:${PORT_HTTP}'
       - '--entrypoints.web.http.sanitizePath=false'
       - '--entrypoints.websecure.address=:${PORT_HTTPS}'
@@ -21,20 +22,27 @@ services:
       - "${PORT_HTTP}:${PORT_HTTP}"
       - "${PORT_HTTPS}:${PORT_HTTPS}"
       - "${PORT_TCP}:${PORT_TCP}"
+    env_file:
+      - cloudflare.env
     volumes:
       - "./letsencrypt:/letsencrypt"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     restart: on-failure
     networks:
       - ehacking
-    # labels:
-      # - 'traefik.http.routers.dashboard.rule=(PathPrefix(`/api`) || PathPrefix(`/dashboard`))'
-      # - 'traefik.http.routers.dashboard.priority=99999'
-      # - 'traefik.http.routers.dashboard.service=api@internal'
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.middlewares.basicauth.basicauth.users=${BASICAUTH_USERS}'
+      - 'traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)'
+      - 'traefik.http.routers.dashboard.entrypoints=websecure'
+      - 'traefik.http.routers.dashboard.tls=true'
+      - 'traefik.http.routers.dashboard.tls.certresolver=letsencrypt'
+      - 'traefik.http.routers.dashboard.service=api@internal'
+      - 'traefik.http.routers.dashboard.middlewares=basicauth'
 
 # root module: lading page with all available modules for selection
   root:
-    image: ${DOCKER_REGISTRY}/root:latest
+    image: ghcr.io/ehacking-websec/ehacking/root:latest
     depends_on:
       traefik:
         required: true
@@ -55,7 +63,7 @@ services:
 
 # JSON module
   json-sec:
-    image: ${DOCKER_REGISTRY}/json-sec
+    image: ghcr.io/ehacking-websec/ehacking/json-sec
     depends_on:
       traefik:
         required: true
@@ -76,7 +84,7 @@ services:
 
 # OpenID Connect module
   oidc:
-    image: ${DOCKER_REGISTRY}/oidc
+    image: ghcr.io/ehacking-websec/ehacking/oidc
     depends_on:
       traefik:
         required: true
@@ -103,7 +111,7 @@ services:
 
 # REST module
   rest-api-sec:
-    image: ${DOCKER_REGISTRY}/rest-api-sec
+    image: ghcr.io/ehacking-websec/ehacking/rest-api-sec
     depends_on:
       traefik:
         required: true
@@ -138,7 +146,7 @@ services:
 
 # SAML module
   saml:
-    image: ${DOCKER_REGISTRY}/saml
+    image: ghcr.io/ehacking-websec/ehacking/saml
     depends_on:
       traefik:
         required: true
@@ -168,7 +176,7 @@ services:
 
 # SOAP module:
   soap-sec:
-    image: ${DOCKER_REGISTRY}/soap-sec
+    image: ghcr.io/ehacking-websec/ehacking/soap-sec
     depends_on:
       traefik:
         required: true
@@ -198,7 +206,7 @@ services:
 
 # SOAP module: real flag service (private network only)
   axis2-flag:
-    image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
+    image: ghcr.io/ehacking-websec/ehacking/axis2-flag:latest
     env_file:
       - flags_axis2-flag.env
     restart: on-failure
@@ -209,7 +217,7 @@ services:
 
 # SOAP module: fake-flag service (publicly available)
   axis2-fake:
-    image: ghcr.io/ehacking-websec/ehacking/axis2-flag:${DOCKER_TAG}
+    image: ghcr.io/ehacking-websec/ehacking/axis2-flag:latest
     depends_on:
       traefik:
         required: true
@@ -228,7 +236,7 @@ services:
 
 # Web security module
   web-sec:
-    image: ${DOCKER_REGISTRY}/web-sec
+    image: ghcr.io/ehacking-websec/ehacking/web-sec
     depends_on:
       traefik:
         required: true
@@ -252,7 +260,7 @@ services:
 
 # XML module
   xml-sec:
-    image: ${DOCKER_REGISTRY}/xml-sec
+    image: ghcr.io/ehacking-websec/ehacking/xml-sec
     depends_on:
       traefik:
         required: true
@@ -368,6 +376,107 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: on-failure
 
+# Recruiting platform
+  recruiting-challenge:
+    image: ghcr.io/ehacking-websec/recruiting/challenge:latest
+    pull_policy: always
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    environment:
+      PORT: "3000"
+      REGISTRY_DB_PATH: /data/registry.db
+      URL_STYLE: subdomain
+      CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
+      BOT_PUBLIC_ORIGIN: https://${RECRUITING_BOT_HOST}
+    volumes:
+      - recruiting-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.recruiting-challenge.entrypoints=websecure"
+      - "traefik.http.routers.recruiting-challenge.rule=Host(`${RECRUITING_CHALLENGE_HOST}`) || HostRegexp(`^.+\\.${RECRUITING_CHALLENGE_HOST}$$`)"
+      - "traefik.http.routers.recruiting-challenge.tls=true"
+      - "traefik.http.routers.recruiting-challenge.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.recruiting-challenge.tls.domains[0].main=${RECRUITING_TIER_HOST}"
+      - "traefik.http.routers.recruiting-challenge.tls.domains[0].sans=*.${RECRUITING_TIER_HOST},*.${RECRUITING_CHALLENGE_HOST}"
+      - "traefik.http.services.recruiting-challenge.loadbalancer.server.port=3000"
+    restart: on-failure
+    networks:
+      - ehacking
+
+  recruiting-bot:
+    image: ghcr.io/ehacking-websec/recruiting/bot:latest
+    pull_policy: always
+    init: true
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+      recruiting-challenge:
+        required: true
+        condition: service_started
+    environment:
+      PORT: "1337"
+      REGISTRY_DB_PATH: /data/registry.db
+      CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
+      CHALLENGE_INTERNAL_ORIGIN: http://recruiting-challenge:3000
+      BOT_PUBLIC_ORIGIN: https://${RECRUITING_BOT_HOST}
+      BOT_REPORT_RATE_LIMIT: "2"
+    volumes:
+      - recruiting-data:/data
+    # Puppeteer + Firefox is the heaviest piece — cap RAM so a stuck
+    # browser can't crowd the host and cpus so bursty reports don't
+    # starve challenge + instructor.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      - "traefik.enable=true"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.recruiting-bot.entrypoints=websecure"
+      - "traefik.http.routers.recruiting-bot.rule=Host(`${RECRUITING_BOT_HOST}`)"
+      - "traefik.http.routers.recruiting-bot.tls=true"
+      - "traefik.http.routers.recruiting-bot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.recruiting-bot.loadbalancer.server.port=1337"
+    restart: on-failure
+    networks:
+      - ehacking
+
+  recruiting-instructor:
+    image: ghcr.io/ehacking-websec/recruiting/instructor:latest
+    pull_policy: always
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+      recruiting-challenge:
+        required: true
+        condition: service_started
+    environment:
+      PORT: "3000"
+      REGISTRY_DB_PATH: /data/registry.db
+      URL_STYLE: subdomain
+      CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
+      BOT_PUBLIC_ORIGIN: https://${RECRUITING_BOT_HOST}
+    volumes:
+      - recruiting-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.recruiting-instructor.entrypoints=websecure"
+      - "traefik.http.routers.recruiting-instructor.rule=Host(`${RECRUITING_INSTRUCTOR_HOST}`)"
+      - "traefik.http.routers.recruiting-instructor.tls=true"
+      - "traefik.http.routers.recruiting-instructor.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.recruiting-instructor.middlewares=basicauth"
+      - "traefik.http.services.recruiting-instructor.loadbalancer.server.port=3000"
+    restart: on-failure
+    networks:
+      - ehacking
+
 networks:
   ehacking:
   soap-internal:
@@ -375,3 +484,4 @@ networks:
 volumes:
   passkeys-instance-data:
   passkeys-mongo-data:
+  recruiting-data:
