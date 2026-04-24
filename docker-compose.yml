@@ -388,8 +388,9 @@ services:
       PORT: "3000"
       REGISTRY_DB_PATH: /data/registry.db
       URL_STYLE: subdomain
-      CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret-11cde19f9d2f5b99-change-me-in-prod}
       BOT_PUBLIC_ORIGIN: https://${RECRUITING_BOT_HOST}
+      CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
     volumes:
       - recruiting-data:/data
     labels:
@@ -422,6 +423,7 @@ services:
       REGISTRY_DB_PATH: /data/registry.db
       CHALLENGE_PUBLIC_ORIGIN: https://${RECRUITING_CHALLENGE_HOST}
       CHALLENGE_INTERNAL_ORIGIN: http://recruiting-challenge:3000
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:-bot-secret-11cde19f9d2f5b99-change-me-in-prod}
       BOT_PUBLIC_ORIGIN: https://${RECRUITING_BOT_HOST}
       BOT_REPORT_RATE_LIMIT: "2"
     volumes:
