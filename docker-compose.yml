@@ -352,6 +352,29 @@ services:
     volumes:
       - passkeys-mongo-data:/data/db
 
+  # Crawling Maze
+  crawling-maze:
+    image: ghcr.io/ehacking-websec/crawling-maze:latest
+    restart: on-failure
+    pull_policy: always
+    networks:
+      - ehacking
+    expose:
+      - "8080"
+    depends_on:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.crawling-maze.entrypoints=websecure"
+      - "traefik.http.routers.crawling-maze.rule=Host(`${CRAWLING_MAZE_HOST}`)"
+      - "traefik.http.routers.crawling-maze.tls.certresolver=letsencrypt"
+      - "traefik.http.services.crawling-maze.loadbalancer.server.port=8080"
+      - "com.centurylinklabs.watchtower.enable=true"
+    volumes:
+      - crawling-maze-sessions:/var/lib/crawling-maze/sessions
+    environment:
+      - FLASK_SECRET_KEY=secret
+
   # Watchtower
   watchtower:
     image: docker.io/nickfedor/watchtower
