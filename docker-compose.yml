@@ -510,3 +510,4 @@ volumes:
   passkeys-instance-data:
   passkeys-mongo-data:
   recruiting-data:
+  crawling-maze-sessions:
