@@ -374,6 +374,8 @@ services:
       - crawling-maze-sessions:/var/lib/crawling-maze/sessions
     environment:
       - FLASK_SECRET_KEY=secret
+    env_file:
+      - flags_crawling-maze.env
 
   # Watchtower
   watchtower:
