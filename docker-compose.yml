@@ -93,7 +93,8 @@ services:
         condition: service_started
     env_file:
       - .env
-      - credentials.env
+      - path: credentials.env
+        required: false
       - flags_oidc.env
     environment:
       # Internal address of the victim-bot service. BotProxyServlet relays
@@ -164,7 +165,8 @@ services:
       - 30004:8787
     env_file:
       - .env
-      - credentials.env
+      - path: credentials.env
+        required: false
       - flags_saml.env
     labels:
       - 'traefik.enable=true'
@@ -293,7 +295,8 @@ services:
       - traefik
     env_file:
       - .env
-      - credentials.env
+      - path: credentials.env
+        required: false
     environment:
       - PORT=3000
       - CATCHER_DB_PATH=/data/registry.db
@@ -330,7 +333,8 @@ services:
       - oidc
     env_file:
       - .env
-      - credentials.env
+      - path: credentials.env
+        required: false
       - flags_oidc.env
     environment:
       - PORT=1338
