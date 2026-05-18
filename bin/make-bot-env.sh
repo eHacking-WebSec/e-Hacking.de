@@ -4,9 +4,13 @@
 # internal bot requests.
 #
 # Usage:
-#   ./make-bot-env.sh           # generate and write bot.env
-#   ./make-bot-env.sh --force   # overwrite existing bot.env
+#   ./bin/make-bot-env.sh           # generate and write bot.env
+#   ./bin/make-bot-env.sh --force   # overwrite existing bot.env
 set -euo pipefail
+
+# Resolve to the deployment root so bot.env always lands beside .env,
+# regardless of where the script is invoked from.
+cd "$(dirname "$0")/.."
 
 FORCE=0
 if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then

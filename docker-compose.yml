@@ -17,6 +17,8 @@ services:
       - '--entrypoints.websecure.http.tls=true'
       - '--entrypoints.tcpsecure.address=:${PORT_TCP}'  # ← Separater Port für TCP
       - '--providers.docker=true'
+      - '--providers.file.directory=/etc/traefik/dynamic'
+      - '--providers.file.watch=true'
       #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
     ports:
       - "${PORT_HTTP}:${PORT_HTTP}"
@@ -25,14 +27,14 @@ services:
     env_file:
       - cloudflare.env
     volumes:
-      - "./letsencrypt:/letsencrypt"
+      - "letsencrypt:/letsencrypt"
+      - "./traefik/dynamic:/etc/traefik/dynamic:ro"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     restart: on-failure
     networks:
       - ehacking
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.middlewares.basicauth.basicauth.users=${BASICAUTH_USERS}'
       - 'traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)'
       - 'traefik.http.routers.dashboard.entrypoints=websecure'
       - 'traefik.http.routers.dashboard.tls=true'
@@ -91,8 +93,14 @@ services:
         condition: service_started
     env_file:
       - .env
+      - credentials.env
+      - flags_oidc.env
     environment:
-      - ATTACKER_URL=https://${ATTACKER_HOST}:${PORT_HTTPS}
+      # Internal address of the victim-bot service. BotProxyServlet relays
+      # /__bot-proxy/* POSTs from the student's browser to this host so the
+      # bot endpoint stays same-origin and the bot's hostname is not leaked
+      # into the rendered page source.
+      - BOT_URL=http://victim-bot:1338
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.oidc.entrypoints=websecure'
@@ -108,6 +116,7 @@ services:
       - traefik:${SPA_HOST}
       - traefik:${IDP_HOST}
       - traefik:${RS_HOST}
+      - traefik:${CATCHER_HOST}
 
 # REST module
   rest-api-sec:
@@ -155,6 +164,7 @@ services:
       - 30004:8787
     env_file:
       - .env
+      - credentials.env
       - flags_saml.env
     labels:
       - 'traefik.enable=true'
@@ -163,16 +173,13 @@ services:
       - 'traefik.http.routers.saml.tls=true'
       - 'traefik.http.routers.saml.tls.certresolver=letsencrypt'
       - 'traefik.http.services.saml.loadbalancer.server.port=80'
-    extra_hosts:
-      # - "${SP_HOST}:127.0.0.1"
-      # - "${IDP_HOST}:127.0.0.1"
-      - "${ATTACKER_HOST}:127.0.0.1"
     restart: on-failure
     networks:
       - ehacking
     links:
       - traefik:${SP_HOST}
       - traefik:${IDP_HOST}
+      - traefik:${CATCHER_HOST}
 
 # SOAP module:
   soap-sec:
@@ -243,10 +250,6 @@ services:
         condition: service_started
     env_file:
       - .env
-    # TODO: Check if we really need these (since they are in .env)
-    # environment:
-    #   SP_HOST: ${SP_HOST}
-    #   IDP_HOST: ${IDP_HOST}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.web-sec.entrypoints=websecure'
@@ -282,22 +285,75 @@ services:
     restart: on-failure
     networks:
       - ehacking
-  attacker:
-    image: mendhak/http-https-echo:31
+  # Catcher / Attacker service
+  catcher:
+    image: ghcr.io/ehacking-websec/ehacking/catcher:latest
+    pull_policy: always
     depends_on:
       - traefik
+    env_file:
+      - .env
+      - credentials.env
+    environment:
+      - PORT=3000
+      - CATCHER_DB_PATH=/data/registry.db
+      - CATCHER_PUBLIC_PORT=${PORT_HTTPS}
+    volumes:
+      - catcher-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.catcher.entrypoints=websecure"
+      - "traefik.http.routers.catcher.rule=Host(`${CATCHER_HOST}`) || HostRegexp(`^.+\\.${CATCHER_HOST}$$`)"
+      - "traefik.http.routers.catcher.tls=true"
+      - "traefik.http.routers.catcher.tls.certresolver=letsencrypt"
+      # DNS-01 issues a wildcard cert covering every per-salt subdomain in
+      # one go — no per-host links: dance like the local-dev stack needs.
+      - "traefik.http.routers.catcher.tls.domains[0].main=${CATCHER_HOST}"
+      - "traefik.http.routers.catcher.tls.domains[0].sans=*.${CATCHER_HOST}"
+      - "traefik.http.services.catcher.loadbalancer.server.port=3000"
+    restart: on-failure
+    networks:
+      - ehacking
+    links:
+      # Outbound: catcher's mSP template POSTs token-exchange / userinfo
+      # requests at the honest IdP. Alias the bare host so SNI carries the
+      # right name into step-ca-issued certs at the IdP.
+      # - traefik:${IDP_HOST}
+
+  # Victim-bot
+  victim-bot:
+    image: ghcr.io/ehacking-websec/ehacking/victim-bot:latest
+    pull_policy: always
+    init: true
+    depends_on:
+      - oidc
+    env_file:
+      - .env
+      - credentials.env
+      - flags_oidc.env
+    environment:
+      - PORT=1338
+      - BOT_REPORT_RATE_LIMIT=${BOT_REPORT_RATE_LIMIT:-6}
+      - OEMMES_USERNAME=oemmes
+      - USER307_USERNAME=user307
+      - BOT_OIDC_LOGIN_URL=https://${IDP_HOST}:${PORT_HTTPS}${BASE_PATH_OIDC_IDP}/login.xhtml
+      - BOT_OIDC_LOGGED_IN_PROBE=https://${IDP_HOST}:${PORT_HTTPS}${BASE_PATH_OIDC_IDP}/index.xhtml
+      - BOT_OIDC_ALLOWED_ORIGINS=https://${SP_HOST}:${PORT_HTTPS},https://${SPA_HOST}:${PORT_HTTPS},https://${IDP_HOST}:${PORT_HTTPS},https://${CATCHER_HOST}:${PORT_HTTPS}
+      - BOT_OIDC_ALLOWED_ATTACK_IDS=redir-2,covert-redirect,trc-1,trc-2,or-1,or-2,or-3,or-4
     expose:
-      - "8080"
-      - "8443"
+      - "1338"
     restart: on-failure
     networks:
       - ehacking
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.attacker.entrypoints=websecure"
-      - "traefik.http.routers.attacker.rule=( Host(`${ATTACKER_HOST}`) || HostRegexp(`^.+\\.${ATTACKER_HOST}$`) )"
-      - 'traefik.http.routers.attacker.tls.certresolver=letsencrypt'
-      - "traefik.http.services.attacker.loadbalancer.server.port=8080"
+      - "traefik.enable=false"
+      - "com.centurylinklabs.watchtower.enable=true"
+    # links:
+    #   - traefik:${SP_HOST}
+    #   - traefik:${SPA_HOST}
+    #   - traefik:${IDP_HOST}
+    #   - traefik:${CATCHER_HOST}
 
   rookies:
     image: ghcr.io/ehacking-websec/rookies:latest
@@ -376,30 +432,6 @@ services:
       - FLASK_SECRET_KEY=secret
     env_file:
       - flags_crawling-maze.env
-
-  # Watchtower
-  watchtower:
-    image: docker.io/nickfedor/watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - TZ=Europe/Berlin
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_LABEL_ENABLE=true
-      - WATCHTOWER_INCLUDE_RESTARTING=true
-      # - WATCHTOWER_RUN_ONCE=true
-      # Field name   | Mandatory? | Allowed values  | Allowed special characters
-      # ----------   | ---------- | --------------  | --------------------------
-      # Seconds      | Yes        | 0-59            | * / , -
-      # Minutes      | Yes        | 0-59            | * / , -
-      # Hours        | Yes        | 0-23            | * / , -
-      # Day of month | Yes        | 1-31            | * / , - ?
-      # Month        | Yes        | 1-12 or JAN-DEC | * / , -
-      # Day of week  | Yes        | 0-6 or SUN-SAT  | * / , - ?
-      - WATCHTOWER_SCHEDULE=0 0 7 * * * # every day on 7am
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-    restart: on-failure
 
 # Recruiting platform
   recruiting-challenge:
@@ -504,12 +536,38 @@ services:
     networks:
       - ehacking
 
+  # Watchtower
+  watchtower:
+    image: docker.io/nickfedor/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Europe/Berlin
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      # - WATCHTOWER_RUN_ONCE=true
+      # Field name   | Mandatory? | Allowed values  | Allowed special characters
+      # ----------   | ---------- | --------------  | --------------------------
+      # Seconds      | Yes        | 0-59            | * / , -
+      # Minutes      | Yes        | 0-59            | * / , -
+      # Hours        | Yes        | 0-23            | * / , -
+      # Day of month | Yes        | 1-31            | * / , - ?
+      # Month        | Yes        | 1-12 or JAN-DEC | * / , -
+      # Day of week  | Yes        | 0-6 or SUN-SAT  | * / , - ?
+      - WATCHTOWER_SCHEDULE=0 0 7 * * * # every day on 7am
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: on-failure
+
 networks:
   ehacking:
   soap-internal:
 
 volumes:
+  catcher-data:
+  crawling-maze-sessions:
+  letsencrypt:
   passkeys-instance-data:
   passkeys-mongo-data:
   recruiting-data:
-  crawling-maze-sessions:

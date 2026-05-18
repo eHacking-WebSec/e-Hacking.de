@@ -1,8 +1,11 @@
-flags_*.env
-flag_*.xml
-flag_*.txt
-letsencrypt/
 .envrc
-cloudflare.env
+.vscode/settings.json
 auth.env
 bot.env
+cloudflare.env
+credentials.env
+flag_*.txt
+flag_*.xml
+flags_*.env
+letsencrypt/
+traefik/dynamic/basicauth.yml
