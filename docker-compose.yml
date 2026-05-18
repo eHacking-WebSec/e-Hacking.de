@@ -40,7 +40,7 @@ services:
       - 'traefik.http.routers.dashboard.tls=true'
       - 'traefik.http.routers.dashboard.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.dashboard.service=api@internal'
-      - 'traefik.http.routers.dashboard.middlewares=basicauth'
+      - 'traefik.http.routers.dashboard.middlewares=basicauth@file'
 
 # root module: lading page with all available modules for selection
   root:
@@ -534,7 +534,7 @@ services:
       - "traefik.http.routers.recruiting-instructor.rule=Host(`${RECRUITING_INSTRUCTOR_HOST}`)"
       - "traefik.http.routers.recruiting-instructor.tls=true"
       - "traefik.http.routers.recruiting-instructor.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.recruiting-instructor.middlewares=basicauth"
+      - "traefik.http.routers.recruiting-instructor.middlewares=basicauth@file"
       - "traefik.http.services.recruiting-instructor.loadbalancer.server.port=3000"
     restart: on-failure
     networks:
