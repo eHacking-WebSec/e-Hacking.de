@@ -315,7 +315,7 @@ services:
     restart: on-failure
     networks:
       - ehacking
-    links:
+    # links:
       # Outbound: catcher's mSP template POSTs token-exchange / userinfo
       # requests at the honest IdP. Alias the bare host so SNI carries the
       # right name into step-ca-issued certs at the IdP.
