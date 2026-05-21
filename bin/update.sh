@@ -14,4 +14,8 @@ export COMPOSE_ENV_FILES=.env,cloudflare.env,bot.env,credentials.env
 
 git pull
 docker compose pull
+# Top up flags_<svc>.env with any new FLAG_ keys the freshly-pulled
+# images added. Existing values are preserved; without this step a new
+# challenge would silently run against its image's `_dummy` default
+./bin/make-flags.sh
 docker compose up -d

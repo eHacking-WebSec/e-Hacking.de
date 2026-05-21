@@ -12,8 +12,13 @@
 # flags_crawling-maze.env stays hand-managed.
 #
 # Usage:
-#   ./bin/make-flags.sh           # fill in missing flags_<svc>.env files only
-#   ./bin/make-flags.sh --force   # overwrite all (rotate every flag value)
+#   ./bin/make-flags.sh           # top up: keep existing values, only add new keys
+#   ./bin/make-flags.sh --force   # rotate every flag value (destroys old wins)
+#
+# The top-up mode matters when a new challenge ships a new FLAG_ env var on
+# top of an already-deployed stack: re-running without --force adds just the
+# new key (with a fresh `_RANDOM` token) and leaves every existing flag's
+# value untouched, so student submissions against the old values stay valid.
 set -euo pipefail
 
 # Resolve to the deployment root so flags_*.env land beside docker-compose.yml.
@@ -43,10 +48,6 @@ fi
 
 for svc in "${SERVICES[@]}"; do
   out="flags_${svc}.env"
-  if [ -e "$out" ] && [ "$FORCE" -ne 1 ]; then
-    echo "skip $out (exists; pass --force to rotate)" >&2
-    continue
-  fi
 
   image="${REGISTRY}/${svc}:latest"
   if ! docker pull -q "$image" >/dev/null 2>&1; then
@@ -62,20 +63,47 @@ for svc in "${SERVICES[@]}"; do
     continue
   fi
 
+  # Slurp the existing file (if any) into a key→value map so top-up
+  # mode preserves real flag values while picking up any new keys the
+  # image has gained.
+  declare -A existing=()
+  if [ -e "$out" ]; then
+    while IFS= read -r l || [ -n "$l" ]; do
+      [[ -z "$l" || "$l" =~ ^[[:space:]]*# ]] && continue
+      [[ "$l" == *=* ]] || continue
+      n="${l%%=*}"; v="${l#*=}"
+      existing["$n"]="$v"
+    done < "$out"
+  fi
+
   umask 077
   {
     printf '# CTF Flags for %s — generated %s\n' "$svc" "$(date)"
+    printf '# Top up with: ./make-flags.sh    (keeps existing values)\n'
     printf '# Rotate with: ./make-flags.sh --force\n\n'
   } > "$out"
 
+  added=0; kept=0; rotated=0
   while IFS= read -r line; do
     key="${line%%=*}"
     val="${line#*=}"
-    # Replace `_dummy}` at the end of FLAG{...} with `_<random>}`.
-    new=$(printf '%s' "$val" | sed "s/_dummy}$/_$(rnd)}/")
+    if [ "$FORCE" -eq 1 ]; then
+      # Replace `_dummy}` at the end of FLAG{...} with `_<random>}`.
+      new=$(printf '%s' "$val" | sed "s/_dummy}$/_$(rnd)}/")
+      rotated=$((rotated+1))
+    elif [ -n "${existing[$key]:-}" ]; then
+      # Top-up mode: known key → keep its current value verbatim.
+      new="${existing[$key]}"
+      kept=$((kept+1))
+    else
+      # Top-up mode: new key from the image → mint a fresh random value.
+      new=$(printf '%s' "$val" | sed "s/_dummy}$/_$(rnd)}/")
+      added=$((added+1))
+    fi
     printf '%s=%s\n' "$key" "$new" >> "$out"
   done <<< "$flags"
-  echo "wrote $out" >&2
+  echo "wrote $out (added=$added kept=$kept rotated=$rotated)" >&2
+  unset existing
 done
 
 # xml-sec also reads three flag values from BIND-MOUNTED files (not env)

@@ -25,6 +25,10 @@ down:
 update:
     git pull
     docker compose pull
+    # Top up flags_<svc>.env so new FLAG_ keys from freshly-pulled
+    # images get a real value before the container starts. Existing
+    # flags are preserved (no --force).
+    ./bin/make-flags.sh
     @just up
 
 # Pull all images without restarting anything.
