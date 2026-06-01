@@ -46,28 +46,37 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-for svc in "${SERVICES[@]}"; do
-  out="flags_${svc}.env"
+# Each service is independent (disjoint output file, local `existing` map),
+# so we fan out and wait. Per-service stderr is buffered to a tmp log so the
+# summary lines stay readable instead of interleaving across 7 jobs.
+logdir=$(mktemp -d)
+trap 'rm -rf "$logdir"' EXIT
 
-  image="${REGISTRY}/${svc}:latest"
+process_service() {
+  local svc="$1"
+  local out="flags_${svc}.env"
+  local image="${REGISTRY}/${svc}:latest"
+
   if ! docker pull -q "$image" >/dev/null 2>&1; then
     echo "warn: cannot pull $image — skipping $svc" >&2
-    continue
+    return 0
   fi
 
   # `env` is a stock util in every base image; --entrypoint bypasses the
   # module's standalone.sh / Node entrypoint.
+  local flags
   flags=$(docker run --rm --entrypoint env "$image" 2>/dev/null | grep '^FLAG_' || true)
   if [ -z "$flags" ]; then
     echo "warn: no FLAG_ entries in $image — skipping $svc" >&2
-    continue
+    return 0
   fi
 
   # Slurp the existing file (if any) into a key→value map so top-up
   # mode preserves real flag values while picking up any new keys the
   # image has gained.
-  declare -A existing=()
+  local -A existing=()
   if [ -e "$out" ]; then
+    local l n v
     while IFS= read -r l || [ -n "$l" ]; do
       [[ -z "$l" || "$l" =~ ^[[:space:]]*# ]] && continue
       [[ "$l" == *=* ]] || continue
@@ -83,7 +92,7 @@ for svc in "${SERVICES[@]}"; do
     printf '# Rotate with: ./make-flags.sh --force\n\n'
   } > "$out"
 
-  added=0; kept=0; rotated=0
+  local added=0 kept=0 rotated=0 key val new line
   while IFS= read -r line; do
     key="${line%%=*}"
     val="${line#*=}"
@@ -103,8 +112,27 @@ for svc in "${SERVICES[@]}"; do
     printf '%s=%s\n' "$key" "$new" >> "$out"
   done <<< "$flags"
   echo "wrote $out (added=$added kept=$kept rotated=$rotated)" >&2
-  unset existing
+}
+
+pids=()
+for svc in "${SERVICES[@]}"; do
+  process_service "$svc" >"$logdir/$svc.out" 2>"$logdir/$svc.log" &
+  pids+=("$!")
 done
+
+# Wait per service in the original SERVICES order so logs print in a stable
+# order. Track failures but keep going so every service gets reported.
+fail=0
+for i in "${!SERVICES[@]}"; do
+  svc="${SERVICES[$i]}"
+  if ! wait "${pids[$i]}"; then
+    echo "error: $svc failed (exit $?)" >&2
+    fail=1
+  fi
+  [ -s "$logdir/$svc.log" ] && cat "$logdir/$svc.log" >&2
+  [ -s "$logdir/$svc.out" ] && cat "$logdir/$svc.out"
+done
+[ "$fail" -eq 0 ] || exit 1
 
 # xml-sec also reads three flag values from BIND-MOUNTED files (not env)
 # so the operator can rotate them without rebuilding the image.
