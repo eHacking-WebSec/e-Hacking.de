@@ -4,6 +4,9 @@
 # COMPOSE_FILE + CONTAINER_SOCKET so the compose file's interpolation
 # and the runtime's discovery both pick them up, then execs through.
 #
+# Also appends modules.env to COMPOSE_ENV_FILES if it exists, so an
+# operator's profile override wins over the .env default.
+#
 # Used by the Justfile and bin/update.sh.
 set -e
 
@@ -12,5 +15,15 @@ cd "$(dirname "$0")/.."
 runtime_env=$(./bin/runtime-env.sh) || exit 1
 eval "$runtime_env"
 export RUNTIME CONTAINER_SOCKET COMPOSE_FILE TRAEFIK_SOCK_MOUNT WATCHTOWER_SOCK_MOUNT
+
+# Append modules.env to the env-file chain only when it exists. The
+# caller (Justfile / update.sh) already exports the default chain;
+# falling back to the documented default keeps us robust if someone
+# invokes this script directly without the wrapper context.
+env_files="${COMPOSE_ENV_FILES:-.env,cloudflare.env,bot.env,credentials.env}"
+if [ -f modules.env ]; then
+    env_files="${env_files},modules.env"
+fi
+export COMPOSE_ENV_FILES="$env_files"
 
 exec "$RUNTIME" compose "$@"

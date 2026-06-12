@@ -70,6 +70,7 @@ services:
 # JSON module
   json-sec:
     image: ghcr.io/ehacking-websec/ehacking/json-sec
+    profiles: [json]
     depends_on:
       traefik:
         required: true
@@ -91,6 +92,7 @@ services:
 # OpenID Connect module
   oidc:
     image: ghcr.io/ehacking-websec/ehacking/oidc
+    profiles: [oidc]
     depends_on:
       traefik:
         required: true
@@ -126,6 +128,7 @@ services:
 # REST module
   rest-api-sec:
     image: ghcr.io/ehacking-websec/ehacking/rest-api-sec
+    profiles: [rest]
     depends_on:
       traefik:
         required: true
@@ -148,6 +151,7 @@ services:
 
   couchdb:
     image: docker.io/couchdb:latest
+    profiles: [rest]
     environment:
       COUCHDB_USER: "root"
       COUCHDB_PASSWORD: "super_secure"
@@ -161,6 +165,7 @@ services:
 # SAML module
   saml:
     image: ghcr.io/ehacking-websec/ehacking/saml
+    profiles: [saml]
     depends_on:
       traefik:
         required: true
@@ -190,6 +195,7 @@ services:
 # SOAP module:
   soap-sec:
     image: ghcr.io/ehacking-websec/ehacking/soap-sec
+    profiles: [soap]
     depends_on:
       traefik:
         required: true
@@ -220,6 +226,7 @@ services:
 # SOAP module: real flag service (private network only)
   axis2-flag:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:latest
+    profiles: [soap]
     env_file:
       - flags_axis2-flag.env
     restart: on-failure
@@ -231,6 +238,7 @@ services:
 # SOAP module: fake-flag service (publicly available)
   axis2-fake:
     image: ghcr.io/ehacking-websec/ehacking/axis2-flag:latest
+    profiles: [soap]
     depends_on:
       traefik:
         required: true
@@ -250,6 +258,7 @@ services:
 # Web security module
   web-sec:
     image: ghcr.io/ehacking-websec/ehacking/web-sec
+    profiles: [web]
     depends_on:
       traefik:
         required: true
@@ -270,6 +279,7 @@ services:
 # XML module
   xml-sec:
     image: ghcr.io/ehacking-websec/ehacking/xml-sec
+    profiles: [xml]
     depends_on:
       traefik:
         required: true
@@ -294,6 +304,10 @@ services:
   # Catcher / Attacker service
   catcher:
     image: ghcr.io/ehacking-websec/ehacking/catcher:latest
+    # Catcher is the cross-module attacker target. Tagged with every
+    # module that drives traffic at it, so it auto-starts whenever any
+    # of them is enabled. Adjust if a module is added/removed.
+    profiles: [catcher, oidc, saml]
     pull_policy: always
     depends_on:
       - traefik
@@ -331,6 +345,7 @@ services:
   # Victim-bot
   victim-bot:
     image: ghcr.io/ehacking-websec/ehacking/victim-bot:latest
+    profiles: [oidc]
     pull_policy: always
     init: true
     depends_on:
@@ -365,6 +380,7 @@ services:
 
   rookies:
     image: ghcr.io/ehacking-websec/rookies:latest
+    profiles: [rookies]
     pull_policy: always
     depends_on:
       - traefik
@@ -384,6 +400,7 @@ services:
   # Passkeys
   passkeys-app:
     image: ghcr.io/ehacking-websec/fun-with-flags-and-passkeys:latest
+    profiles: [passkeys]
     restart: on-failure
     pull_policy: always
     networks:
@@ -410,6 +427,7 @@ services:
 
   passkeys-mongo:
     image: mongo:4
+    profiles: [passkeys]
     restart: on-failure
     networks:
       - ehacking
@@ -419,6 +437,7 @@ services:
   # Crawling Maze
   crawling-maze:
     image: ghcr.io/ehacking-websec/crawling-maze:latest
+    profiles: [maze]
     restart: on-failure
     pull_policy: always
     networks:
@@ -444,6 +463,7 @@ services:
 # Recruiting platform
   recruiting-challenge:
     image: ghcr.io/ehacking-websec/recruiting/challenge:latest
+    profiles: [recruiting]
     pull_policy: always
     depends_on:
       traefik:
@@ -474,6 +494,7 @@ services:
 
   recruiting-bot:
     image: ghcr.io/ehacking-websec/recruiting/bot:latest
+    profiles: [recruiting]
     pull_policy: always
     init: true
     depends_on:
@@ -515,6 +536,7 @@ services:
 
   recruiting-instructor:
     image: ghcr.io/ehacking-websec/recruiting/instructor:latest
+    profiles: [recruiting]
     pull_policy: always
     depends_on:
       traefik:

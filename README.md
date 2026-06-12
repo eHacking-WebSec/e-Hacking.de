@@ -22,6 +22,7 @@ This project provides an example configuration how we deploy our eHacking platfo
 ├── cloudflare.env                # gitignored — DNS-01 token
 ├── bot.env                       # gitignored — recruiting bot secret
 ├── credentials.env               # gitignored — WildFly + catcher passwords
+├── modules.env                   # gitignored, optional — COMPOSE_PROFILES override
 ├── flags_<module>.env            # gitignored — per-module CTF flags
 ├── flag_xxe1.txt / xxe2.txt / xslt1.xml  # gitignored — bind-mounted into xml-sec
 └── (letsencrypt is a named docker volume, not a host directory)
@@ -75,6 +76,42 @@ Force a specific runtime/socket by exporting before `just`:
 ```bash
 RUNTIME=docker just up
 CONTAINER_SOCKET=/run/podman/podman.sock just up   # e.g. force rootful when both are running
+```
+
+## Selecting modules
+
+`just up` brings up every CTF module by default. To run only a subset,
+create a gitignored `modules.env` listing the profiles you want:
+
+```bash
+# modules.env — skip soap, maze, passkeys
+COMPOSE_PROFILES=json,oidc,rest,saml,web,xml,rookies,recruiting,catcher
+```
+
+Available profiles (omit to skip):
+
+| Profile | Services |
+|---|---|
+| `json` | `json-sec` |
+| `oidc` | `oidc`, `victim-bot` |
+| `rest` | `rest-api-sec`, `couchdb` |
+| `saml` | `saml` |
+| `soap` | `soap-sec`, `axis2-flag`, `axis2-fake` |
+| `web` | `web-sec` |
+| `xml` | `xml-sec` |
+| `passkeys` | `passkeys-app`, `passkeys-mongo` |
+| `maze` | `crawling-maze` |
+| `rookies` | `rookies` |
+| `recruiting` | `recruiting-challenge`, `recruiting-bot`, `recruiting-instructor` |
+| `catcher` | `catcher` (also auto-starts when `oidc` or `saml` is enabled) |
+
+Infrastructure (`traefik`, `root`, `watchtower`) is untagged and always
+runs.
+
+Preview which services would start without doing it:
+
+```bash
+./bin/compose config --services
 ```
 
 ## Quickstart

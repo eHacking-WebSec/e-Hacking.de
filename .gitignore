@@ -8,4 +8,5 @@ flag_*.txt
 flag_*.xml
 flags_*.env
 letsencrypt/
+modules.env
 traefik/dynamic/basicauth.yml
