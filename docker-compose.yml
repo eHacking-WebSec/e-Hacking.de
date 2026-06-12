@@ -29,7 +29,11 @@ services:
     volumes:
       - "letsencrypt:/letsencrypt"
       - "./traefik/dynamic:/etc/traefik/dynamic:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      # Socket mount string is set by bin/runtime-env.sh. Under docker
+      # the default kicks in (host docker socket, read-only). Under
+      # podman, runtime-env.sh emits the podman socket path with `:Z`
+      # (SELinux private relabel) so rootless setups work.
+      - "${TRAEFIK_SOCK_MOUNT:-/var/run/docker.sock:/var/run/docker.sock:ro}"
     restart: on-failure
     networks:
       - ehacking
@@ -544,7 +548,8 @@ services:
   watchtower:
     image: docker.io/nickfedor/watchtower
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # See traefik above — same mount-string ENV plumbing for podman :Z.
+      - "${WATCHTOWER_SOCK_MOUNT:-/var/run/docker.sock:/var/run/docker.sock}"
     environment:
       - TZ=Europe/Berlin
       - WATCHTOWER_CLEANUP=true

@@ -4,9 +4,10 @@
 # marker in every default is replaced with a fresh 16-char random token,
 # so re-runs (with --force) produce a new value set.
 #
-# Source of truth is the image itself — this script reads `docker run env`
+# Source of truth is the image itself — this script reads `<runtime> run env`
 # rather than parsing module Dockerfiles, so it works on a deployment
-# server without an eHacking source checkout.
+# server without an eHacking source checkout. The runtime (docker or
+# podman) is auto-detected via bin/runtime-env.sh.
 #
 # crawling-maze and any other third-party module is NOT in scope here;
 # flags_crawling-maze.env stays hand-managed.
@@ -41,8 +42,11 @@ rnd() {
   ( set +o pipefail; tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 16 )
 }
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "docker not found on PATH." >&2
+runtime_env=$(./bin/runtime-env.sh) || exit 1
+eval "$runtime_env"
+
+if ! command -v "$RUNTIME" >/dev/null 2>&1; then
+  echo "$RUNTIME not found on PATH." >&2
   exit 1
 fi
 
@@ -57,7 +61,7 @@ process_service() {
   local out="flags_${svc}.env"
   local image="${REGISTRY}/${svc}:latest"
 
-  if ! docker pull -q "$image" >/dev/null 2>&1; then
+  if ! "$RUNTIME" pull -q "$image" >/dev/null 2>&1; then
     echo "warn: cannot pull $image — skipping $svc" >&2
     return 0
   fi
@@ -65,7 +69,7 @@ process_service() {
   # `env` is a stock util in every base image; --entrypoint bypasses the
   # module's standalone.sh / Node entrypoint.
   local flags
-  flags=$(docker run --rm --entrypoint env "$image" 2>/dev/null | grep '^FLAG_' || true)
+  flags=$("$RUNTIME" run --rm --entrypoint env "$image" 2>/dev/null | grep '^FLAG_' || true)
   if [ -z "$flags" ]; then
     echo "warn: no FLAG_ entries in $image — skipping $svc" >&2
     return 0

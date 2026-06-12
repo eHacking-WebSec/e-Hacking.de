@@ -1,7 +1,13 @@
 # eHacking deployment recipes for e-hacking.de.
 #
-# All recipes inherit COMPOSE_ENV_FILES so docker-compose interpolation
-# sees every secret file. Requires Docker Compose v2.24+ (Jan 2024).
+# All recipes inherit COMPOSE_ENV_FILES so compose interpolation sees
+# every secret file. Requires Compose v2.24+ (Jan 2024) — either via
+# `docker compose` or `podman compose` (the compose-go wrapper, not
+# the legacy Python `podman-compose`).
+#
+# Container runtime is auto-detected by ./bin/compose, in this order:
+# rootless podman > rootful podman > docker.
+#
 # auth.env is gone — basicauth lives in traefik/dynamic/basicauth.yml
 # and is loaded by Traefik's file provider, not Compose interpolation.
 
@@ -15,16 +21,16 @@ default:
 # middleware and the API would be open. Run `just init` first.
 up:
     @test -e traefik/dynamic/basicauth.yml || { echo "Missing traefik/dynamic/basicauth.yml — run 'just init' or 'just add-basicauth-user <name>' first."; exit 1; }
-    docker compose up -d
+    ./bin/compose up -d
 
 # Tear the stack down (containers only; named volumes are kept).
 down:
-    docker compose down
+    ./bin/compose down
 
 # Pull-rebuild-restart cycle. Equivalent to `./bin/update.sh`.
 update:
     git pull
-    docker compose pull
+    ./bin/compose pull
     # Top up flags_<svc>.env so new FLAG_ keys from freshly-pulled
     # images get a real value before the container starts. Existing
     # flags are preserved (no --force).
@@ -33,7 +39,7 @@ update:
 
 # Pull all images without restarting anything.
 pull:
-    docker compose pull
+    ./bin/compose pull
 
 # First-time setup: bootstrap every secret + flag file the stack needs.
 # Each helper refuses to overwrite an existing file, so re-running is
@@ -69,12 +75,12 @@ add-basicauth-user USER='':
 
 # Tail logs. Pass a service name to scope: `just logs catcher`.
 logs SERVICE='':
-    docker compose logs -f {{SERVICE}}
+    ./bin/compose logs -f {{SERVICE}}
 
 # Show service status.
 ps:
-    docker compose ps
+    ./bin/compose ps
 
 # Restart a single service. Useful after editing its flag file.
 restart SERVICE:
-    docker compose up -d --force-recreate {{SERVICE}}
+    ./bin/compose up -d --force-recreate {{SERVICE}}

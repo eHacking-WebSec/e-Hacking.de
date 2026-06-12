@@ -1,0 +1,27 @@
+# Podman overlay for docker-compose.yml.
+#
+# bin/runtime-env.sh selects this file (via COMPOSE_FILE) when it
+# detects podman. The socket mount itself is parametrised in the base
+# file via ${TRAEFIK_SOCK_MOUNT} / ${WATCHTOWER_SOCK_MOUNT} — Compose
+# merges volume lists additively, so we can't swap a mount via
+# override. The two things we *can* add additively are cap_add and
+# environment entries; that's what this file does.
+#
+# Why each addition:
+#   - cap_add CAP_NET_BIND_SERVICE: rootless podman needs the cap on the
+#     traefik container to bind low ports (80/443/etc.). Idempotent under
+#     rootful podman and docker.
+#   - DOCKER_HOST=unix:///var/run/docker.sock: belt-and-suspenders for
+#     tools that consult the env var instead of the conventional path.
+#     Watchtower in particular respects DOCKER_HOST. Reference adaption
+#     (eHacking-WebSec/eHacking-BUW-instance) sets it on both.
+services:
+  traefik:
+    cap_add:
+      - CAP_NET_BIND_SERVICE
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+  watchtower:
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock

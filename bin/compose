@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runtime-agnostic wrapper around `docker compose` / `podman compose`.
+# Resolves the runtime via bin/runtime-env.sh, exports the resulting
+# COMPOSE_FILE + CONTAINER_SOCKET so the compose file's interpolation
+# and the runtime's discovery both pick them up, then execs through.
+#
+# Used by the Justfile and bin/update.sh.
+set -e
+
+cd "$(dirname "$0")/.."
+
+runtime_env=$(./bin/runtime-env.sh) || exit 1
+eval "$runtime_env"
+export RUNTIME CONTAINER_SOCKET COMPOSE_FILE TRAEFIK_SOCK_MOUNT WATCHTOWER_SOCK_MOUNT
+
+exec "$RUNTIME" compose "$@"
