@@ -36,7 +36,18 @@ services:
       - "${TRAEFIK_SOCK_MOUNT:-/var/run/docker.sock:/var/run/docker.sock:ro}"
     restart: on-failure
     networks:
-      - ehacking
+      ehacking:
+        # Internal DNS aliases so containers can resolve the public
+        # hostnames (idp.e-hacking.de etc.) back to traefik instead of
+        # going through public DNS. Replaces the per-service `links:`
+        # blocks that used to live on oidc/saml — Podman rejects
+        # `links:` outright. Docker also works fine with aliases.
+        aliases:
+          - ${SP_HOST}
+          - ${SPA_HOST}
+          - ${IDP_HOST}
+          - ${RS_HOST}
+          - ${CATCHER_HOST}
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)'
@@ -118,12 +129,8 @@ services:
     restart: on-failure
     networks:
       - ehacking
-    links:
-      - traefik:${SP_HOST}
-      - traefik:${SPA_HOST}
-      - traefik:${IDP_HOST}
-      - traefik:${RS_HOST}
-      - traefik:${CATCHER_HOST}
+    # Public-hostname DNS resolution is provided by aliases on the
+    # traefik service — see traefik.networks.ehacking.aliases.
 
 # REST module
   rest-api-sec:
@@ -187,10 +194,8 @@ services:
     restart: on-failure
     networks:
       - ehacking
-    links:
-      - traefik:${SP_HOST}
-      - traefik:${IDP_HOST}
-      - traefik:${CATCHER_HOST}
+    # Public-hostname DNS resolution is provided by aliases on the
+    # traefik service — see traefik.networks.ehacking.aliases.
 
 # SOAP module:
   soap-sec:
@@ -336,11 +341,9 @@ services:
     restart: on-failure
     networks:
       - ehacking
-    # links:
-      # Outbound: catcher's mSP template POSTs token-exchange / userinfo
-      # requests at the honest IdP. Alias the bare host so SNI carries the
-      # right name into step-ca-issued certs at the IdP.
-      # - traefik:${IDP_HOST}
+    # Catcher's mSP template POSTs token-exchange / userinfo requests at
+    # the honest IdP. Public-hostname resolution is provided by aliases
+    # on the traefik service — see traefik.networks.ehacking.aliases.
 
   # Victim-bot
   victim-bot:
@@ -372,11 +375,8 @@ services:
     labels:
       - "traefik.enable=false"
       - "com.centurylinklabs.watchtower.enable=true"
-    # links:
-    #   - traefik:${SP_HOST}
-    #   - traefik:${SPA_HOST}
-    #   - traefik:${IDP_HOST}
-    #   - traefik:${CATCHER_HOST}
+    # Public-hostname resolution (SP/SPA/IDP/CATCHER) is provided by
+    # aliases on the traefik service — see traefik.networks.ehacking.aliases.
 
   rookies:
     image: ghcr.io/ehacking-websec/rookies:latest
