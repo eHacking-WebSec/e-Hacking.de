@@ -15,6 +15,14 @@
 #     tools that consult the env var instead of the conventional path.
 #     Watchtower in particular respects DOCKER_HOST. Reference adaption
 #     (eHacking-WebSec/eHacking-BUW-instance) sets it on both.
+#   - sysctls net.ipv4.ip_unprivileged_port_start=0 on WildFly services:
+#     Docker since 20.10 sets this in every container's netns by default,
+#     so non-root users (jboss) can bind port 80. Podman does NOT carry
+#     that default — without this sysctl, WildFly fails to start the
+#     undertow listener on 0.0.0.0:80 with "Permission denied" and the
+#     container exits 0 after WildFly's graceful shutdown (~23s). Affects
+#     every service whose Traefik label routes to port 80 inside the
+#     container.
 services:
   traefik:
     cap_add:
@@ -25,3 +33,29 @@ services:
   watchtower:
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
+
+  # WildFly services — see header comment for why each needs the sysctl.
+  json-sec:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  oidc:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  root:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  saml:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  soap-sec:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  web-sec:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  xml-sec:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+  rest-api-sec:
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
