@@ -17,6 +17,9 @@ This project provides an example configuration how we deploy our eHacking platfo
 │   ├── make-bot-env.sh
 │   ├── make-credentials.sh
 │   ├── make-flags.sh
+│   ├── backup.sh                 # snapshot secrets + volumes → tarball
+│   ├── restore.sh                # restore a snapshot (runtime-agnostic)
+│   ├── init-podman.sh            # bare-server prep for rootless podman
 │   └── update.sh
 ├── traefik/dynamic/basicauth.yml # gitignored — bcrypt hashes
 ├── cloudflare.env                # gitignored — DNS-01 token
@@ -146,6 +149,59 @@ just restart oidc
 
 If `just` is not installed, the equivalent flat script works:
 `./bin/update.sh` is the legacy one-shot of `just update`.
+
+## Backup & migration
+
+Everything that makes a deployment unique lives *outside* git: the
+gitignored secret/flag files and the stateful named volumes. Two recipes
+bundle and restore all of it, so moving e-hacking.de to a new server is
+copy-one-file-and-go.
+
+```bash
+just backup     # → backups/ehacking-backup-<UTC>.tar.gz
+```
+
+The archive contains:
+
+| Group | Contents |
+|---|---|
+| Files | `cloudflare.env`, `bot.env`, `credentials.env`, `flags_*.env`, `flag_*.{txt,xml}`, `traefik/dynamic/basicauth.yml`, optional `modules.env` / `auth.env` / `.envrc` |
+| Volumes | `catcher-data`, `recruiting-data`, `letsencrypt` (certs — kept to dodge ACME rate limits), `passkeys-instance-data`, `passkeys-mongo-data` |
+
+`crawling-maze-sessions` is deliberately excluded — ephemeral per-visitor
+crawl state, regenerated on demand. Adjust the lists at the top of
+`bin/backup.sh` if the deployment grows new stateful volumes.
+
+Restore on the target host (idempotent; prompts before clobbering). It
+lists the archives in `backups/` and asks which one to use — and if the
+host already holds deployment data, it offers to snapshot that first
+before overwriting:
+
+```bash
+just restore
+```
+
+Volume data is streamed through a throwaway container on both ends, so a
+backup taken under **Docker restores cleanly under rootless Podman** and
+vice-versa — the in-container uids are reapplied via the user namespace
+on the target, not copied raw off the host.
+
+### Bare-server bootstrap
+
+On a fresh server with neither podman nor docker, `init-podman` automates
+the whole "Container runtime" setup below (rootless podman, the compose
+provider, subuid/linger/low-ports) and then restores a backup if one is
+sitting in `backups/`:
+
+```bash
+git clone <repo> e-Hacking.de && cd e-Hacking.de
+# drop your backup in: scp ehacking-backup-*.tar.gz server:e-Hacking.de/backups/
+just init-podman            # interactive; may ask for sudo
+just up
+```
+
+With no backup present it stops short and tells you what a first-time
+bring-up still needs (chiefly `cloudflare.env`, then `just init`).
 
 ## Catcher-specific notes
 

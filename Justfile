@@ -84,3 +84,24 @@ ps:
 # Restart a single service. Useful after editing its flag file.
 restart SERVICE:
     ./bin/compose up -d --force-recreate {{SERVICE}}
+
+# Snapshot the whole deployment (gitignored secret/flag files + stateful
+# volume data) into a single timestamped tarball under backups/. This is
+# everything needed to move e-hacking.de to another server.
+backup:
+    ./bin/backup.sh
+
+# Restore a snapshot created by `just backup`. Lists the archives in
+# backups/ and asks which one to restore. Recreates the secret files and
+# refills the named volumes under this host's runtime (Docker<->Podman
+# portable). Prompts before overwriting anything.
+restore:
+    ./bin/restore.sh
+
+# Prepare a bare server (no podman/docker yet) to run the stack: installs
+# rootless podman + a compose provider, wires up subuid/linger/low-ports,
+# then restores a backup if one is present (else tells you what's still
+# needed). Interactive; may prompt for sudo. Pass a backup path to force
+# which archive to restore: `just init-podman backups/foo.tar.gz`.
+init-podman ARCHIVE='':
+    ./bin/init-podman.sh {{ARCHIVE}}

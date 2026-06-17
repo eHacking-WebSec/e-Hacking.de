@@ -1,5 +1,6 @@
 .envrc
 .vscode/settings.json
+backups/
 auth.env
 bot.env
 cloudflare.env
