@@ -11,3 +11,5 @@ flags_*.env
 letsencrypt/
 modules.env
 traefik/dynamic/basicauth.yml
+passkeys.env
+passkey-private-keys.json

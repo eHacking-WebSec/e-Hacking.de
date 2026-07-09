@@ -417,18 +417,24 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     volumes:
       - passkeys-instance-data:/app/data/instances
+    env_file:
+      - .env
+      - passkeys.env
     environment:
+      - PORT=3000
       - NODE_ENV=production
-      - SESSION_SECRET=${PASSKEYS_SESSION_SECRET}
       - RP_ID=${PASSKEYS_RP_ID}
       - ORIGIN=${PASSKEYS_ORIGIN}
       - USE_MONGO=true
       - MONGO_URI=mongodb://passkeys-mongo:27017/funwithflags
+      - INSTANCE_MAX_AGE_MS=86400000 # 24 hours
+      - CLEANUP_INTERVAL_MS=3600000 # 1 hour
 
   passkeys-mongo:
     image: mongo:4
     profiles: [passkeys]
     restart: on-failure
+    pull_policy: always
     networks:
       - ehacking
     volumes:
