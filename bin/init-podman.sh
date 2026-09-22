@@ -3,9 +3,10 @@
 # Podman, then hand off to backup-restore or first-time init.
 #
 # Idempotent: every step probes current state and only changes the delta,
-# so re-running is safe. It may call sudo for the handful of system-level
-# steps (package install, the unprivileged-port sysctl, linger) and is
-# interactive where a human has to decide (e.g. restore a backup or not).
+# so re-running is safe. Root-free by default — the handful of system-level
+# steps (package install, subuid/subgid, linger) abort with the command to
+# hand the host admin unless ALLOW_SUDO=1 is set. Interactive where a human
+# has to decide (e.g. restore a backup or not).
 #
 # Run as the unprivileged user that will OWN the stack — not as root.
 # Rootless Podman keeps every container in that user's namespace.
@@ -45,7 +46,20 @@ confirm() {  # confirm "question" -> 0 if yes (default No)
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
-need_sudo() {
+# Root-free by default. Every privileged step aborts and names the one-time
+# command to hand the host admin, instead of silently prompting for sudo —
+# on a prepared host none of them is reached anyway. Set ALLOW_SUDO=1 to let
+# this script do the host preparation itself (bare-server bootstrap).
+# See README → "Deploying without root".
+ALLOW_SUDO="${ALLOW_SUDO:-}"
+
+need_sudo() {  # need_sudo "<one-time step for the host admin>"
+    if [ -z "$ALLOW_SUDO" ]; then
+        warn "This step needs root. Running root-free (ALLOW_SUDO is not set)."
+        [ -n "${1:-}" ] && warn "Have the host admin run once:  ${1}"
+        warn "Or re-run this script with ALLOW_SUDO=1 to do it here."
+        exit 1
+    fi
     if [ "$(id -u)" -eq 0 ]; then SUDO=""; return; fi
     if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; return; fi
     echo "This step needs root and 'sudo' is not installed. Re-run as root or install sudo." >&2
@@ -71,7 +85,7 @@ else
 fi
 
 pkg_install() {  # pkg_install pkg...
-    need_sudo
+    need_sudo "install podman + rootless deps (uidmap, slirp4netns/passt, fuse-overlayfs)"
     case "$PKG" in
         apt) $SUDO apt-get update -qq && $SUDO apt-get install -y "$@" ;;
         dnf) $SUDO dnf install -y "$@" ;;
@@ -117,7 +131,7 @@ else
     fi
     [ -n "$COMPOSE_VERSION" ] || { echo "Could not resolve a Compose version; set COMPOSE_VERSION." >&2; exit 1; }
     info "Compose ${COMPOSE_VERSION} (${asset}) -> /usr/local/bin/docker-compose"
-    need_sudo
+    need_sudo "install a compose-go provider so 'podman compose' resolves"
     $SUDO curl -fsSL \
         "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${asset}" \
         -o /usr/local/bin/docker-compose
@@ -171,7 +185,7 @@ if [ "$(id -u)" -ne 0 ]; then
         info "subuid/subgid already allocated for ${user}."
     else
         info "Allocating a subuid/subgid range for ${user}…"
-        need_sudo
+        need_sudo "usermod --add-subuids 100000-165535 --add-subgids 100000-165535 ${user}"
         $SUDO usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$user"
         $SUDO podman system migrate 2>/dev/null || true
     fi
@@ -228,7 +242,7 @@ elif loginctl show-user "$(id -un)" -p Linger 2>/dev/null | grep -q 'Linger=yes'
     info "Linger already enabled for $(id -un)."
 else
     info "Enabling linger for $(id -un)…"
-    need_sudo
+    need_sudo "loginctl enable-linger $(id -un)"
     $SUDO loginctl enable-linger "$(id -un)"
 fi
 

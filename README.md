@@ -140,6 +140,78 @@ Container→container traffic to the public hostnames is resolved
 in-network by the traefik aliases and never leaves the box, so this only
 matters if something hairpins off the host's own public IP.
 
+## Deploying without root
+
+The stack itself never needs root: rootless podman publishes on
+`HOST_PORT_*` (>= 1024) and `just up` only talks to the user's podman
+socket. What does need root is one-time host preparation. Have the host
+admin do these four once, then the deploy account never needs sudo again:
+
+1. Install podman plus the rootless dependencies (`uidmap`,
+   `slirp4netns`/`passt`, `fuse-overlayfs`) and a compose-go provider, so
+   `podman compose version` works for the deploy user.
+2. `usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <user>`
+3. `loginctl enable-linger <user>` — keeps the user manager, and with it
+   the stack, alive past logout.
+4. The firewall rules below.
+
+`podman-restart.service` is a *user* unit, so `bin/init-podman.sh` enables
+it without root.
+
+Then the deploy itself:
+
+```bash
+just init-podman
+just init
+just up
+```
+
+`bin/init-podman.sh` is root-free by default: any step that would need sudo
+aborts and prints the one-time command to hand the admin, instead of
+silently prompting. On a prepared host no such step is reached. To let it
+do the host preparation itself — a bare server you do own root on — run
+`ALLOW_SUDO=1 just init-podman`.
+
+### Firewall rules for the host admin
+
+Public 80/443 must reach the ports the stack publishes, and the host must
+be able to reach itself on the public hostnames.
+
+```
+# 1. Inbound redirect — already in place on e-hacking.de
+iptables -t nat -A PREROUTING -p tcp --dport 80  -j REDIRECT --to-ports 10080
+iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 10443
+
+# 2. Accept the published ports (INPUT sees the rewritten dport)
+iptables -A <input-chain> -p tcp --dport 10080 -m conntrack --ctstate DNAT -j ACCEPT
+iptables -A <input-chain> -p tcp --dport 10443 -m conntrack --ctstate DNAT -j ACCEPT
+
+# 3. Hairpin — REQUIRED, and the one a PREROUTING-only setup misses
+iptables -t nat -A OUTPUT -d <public-ip> -p tcp --dport 443 -j REDIRECT --to-ports 10443
+iptables -t nat -A OUTPUT -d <public-ip> -p tcp --dport 80  -j REDIRECT --to-ports 10080
+```
+
+Rule 3 exists because several containers resolve a *public* hostname and
+connect to it — above all the OIDC SP, which server-side fetches
+`<salt>.${CATCHER_HOST}/.well-known/openid-configuration` for the mIdP
+challenges. Wildcard subdomains cannot be compose network aliases, so that
+lookup goes through public DNS to this machine's own address. Such traffic
+is locally-originated: it takes `nat/OUTPUT`, never `nat/PREROUTING`.
+Before the port split it worked only because podman itself bound
+`0.0.0.0:443`.
+
+The `--ctstate DNAT` match in rule 2 keeps the published ports reachable
+only through the redirect. Without it `https://host:10443/` answers
+directly, and a client that uses it puts `:10443` in its `Host` header,
+which ends up in the OIDC discovery `issuer` and breaks ids-1/ids-3/ids-4
+for that client. Verify before relying on it — a wrong match takes the
+site down.
+
+`just firewall-check` reports on all three groups plus whether anything is
+listening, and runs a behavioural hairpin probe that needs no root. If the
+admin cannot add rule 3, `just firewall-hairpin` adds it locally and
+`just firewall-persist` makes it survive a reboot — both need sudo.
+
 ## Selecting modules
 
 `just up` brings up every CTF module by default. To run only a subset,
@@ -247,15 +319,17 @@ on the target, not copied raw off the host.
 
 ### Bare-server bootstrap
 
-On a fresh server with neither podman nor docker, `init-podman` automates
-the whole "Container runtime" setup below (rootless podman, the compose
-provider, subuid/linger/low-ports) and then restores a backup if one is
-sitting in `backups/`:
+On a fresh server with neither podman nor docker, `init-podman` can do the
+whole "Container runtime" setup below (rootless podman, the compose
+provider, subuid/linger) and then restore a backup if one is sitting in
+`backups/`. That is host preparation, so it needs root — opt in with
+`ALLOW_SUDO=1`. Without it the script stays root-free and prints each step
+for the host admin instead (see "Deploying without root").
 
 ```bash
 git clone <repo> e-Hacking.de && cd e-Hacking.de
 # drop your backup in: scp ehacking-backup-*.tar.gz server:e-Hacking.de/backups/
-just init-podman            # interactive; may ask for sudo
+ALLOW_SUDO=1 just init-podman   # interactive; asks for sudo
 just up
 ```
 

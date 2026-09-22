@@ -98,10 +98,28 @@ backup:
 restore:
     ./bin/restore.sh
 
-# Prepare a bare server (no podman/docker yet) to run the stack: installs
-# rootless podman + a compose provider, wires up subuid/linger/low-ports,
-# then restores a backup if one is present (else tells you what's still
-# needed). Interactive; may prompt for sudo. Pass a backup path to force
-# which archive to restore: `just init-podman backups/foo.tar.gz`.
+# Report whether the host firewall is wired up for the 80->10080 /
+# 443->10443 split: inbound redirect (admin-managed), the nat/OUTPUT
+# hairpin rules (ours), and whether the stack is actually listening.
+# Read-only.
+firewall-check:
+    ./bin/firewall.sh check
+
+# Add the nat/OUTPUT redirects so containers reaching a public hostname
+# (the OIDC SP fetching a catcher salt subdomain, for one) land back on
+# traefik instead of a closed port. Idempotent; prompts for sudo.
+firewall-hairpin:
+    ./bin/firewall.sh hairpin
+
+# Make `firewall-hairpin` survive a reboot via a systemd unit.
+firewall-persist:
+    ./bin/firewall.sh persist
+
+# Prepare a bare server to run the stack, then restore a backup if one is
+# present (else tell you what's still needed). Root-free by default: steps
+# that need root abort with the command to hand the host admin. Prepend
+# ALLOW_SUDO=1 to have it install podman, the compose provider and
+# subuid/linger itself. Pass a backup path to force which archive to
+# restore: `just init-podman backups/foo.tar.gz`.
 init-podman ARCHIVE='':
     ./bin/init-podman.sh {{ARCHIVE}}
