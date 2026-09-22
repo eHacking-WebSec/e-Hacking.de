@@ -13,7 +13,8 @@
 # Steps:
 #   1. Packages: podman + rootless deps + a compose-go provider.
 #   2. Rootless plumbing: subuid/subgid, the user podman.socket.
-#   3. Host: low-port sysctl (only if publishing on 80/443) + linger.
+#   3. Host: low-port sysctl (only if publishing on 80/443), linger,
+#      restart-on-boot.
 #   4. Hand-off: restore a backup if present, else list what's still
 #      needed (cloudflare.env etc.) before `just init && just up`.
 #
@@ -191,7 +192,7 @@ else
 fi
 
 # ----------------------------------------------------------------------
-# 3. Host: unprivileged low ports + linger.
+# 3. Host: unprivileged low ports, linger, restart-on-boot.
 # ----------------------------------------------------------------------
 
 say "Unprivileged low ports"
@@ -229,6 +230,21 @@ else
     info "Enabling linger for $(id -un)…"
     need_sudo
     $SUDO loginctl enable-linger "$(id -un)"
+fi
+
+# Linger alone only keeps the user manager alive; it does not start any
+# container. podman-restart.service is what re-starts the `restart: always`
+# containers after a reboot.
+say "Restart-on-boot"
+if systemctl --user is-enabled --quiet podman-restart.service 2>/dev/null; then
+    info "podman-restart.service already enabled."
+elif systemctl --user enable podman-restart.service 2>/dev/null; then
+    info "Enabled podman-restart.service — the stack comes back after a reboot."
+else
+    warn "Could not enable podman-restart.service from here (no user D-Bus?)."
+    warn "Run this once after logging in again, or the stack stays down"
+    warn "after the next reboot:"
+    warn "  systemctl --user enable podman-restart.service"
 fi
 
 # ----------------------------------------------------------------------

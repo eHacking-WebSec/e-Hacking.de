@@ -1,3 +1,8 @@
+# `restart: always` (not `unless-stopped`): podman-restart.service is what
+# brings the stack back after a reboot, and older podman filters it on
+# `restart-policy=always`, which would skip `unless-stopped` entirely.
+# bin/init-podman.sh enables that unit.
+
 services:
 
   traefik:
@@ -34,7 +39,7 @@ services:
       # podman, runtime-env.sh emits the podman socket path with `:Z`
       # (SELinux private relabel) so rootless setups work.
       - "${TRAEFIK_SOCK_MOUNT:-/var/run/docker.sock:/var/run/docker.sock:ro}"
-    restart: on-failure
+    restart: always
     networks:
       ehacking:
         # Internal DNS aliases so containers can resolve the public
@@ -74,7 +79,7 @@ services:
       - 'traefik.http.routers.root.tls.certresolver=letsencrypt'
       - 'traefik.http.routers.root.priority=1'
       - 'traefik.http.services.root.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -96,7 +101,7 @@ services:
       - 'traefik.http.routers.json-sec.tls=true'
       - 'traefik.http.routers.json-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.json-sec.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -126,7 +131,7 @@ services:
       - 'traefik.http.routers.oidc.tls=true'
       - 'traefik.http.routers.oidc.tls.certresolver=letsencrypt'
       - 'traefik.http.services.oidc.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     # Public-hostname DNS resolution is provided by aliases on the
@@ -150,7 +155,7 @@ services:
       - 'traefik.http.routers.rest-api-sec.tls=true'
       - 'traefik.http.routers.rest-api-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.rest-api-sec.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -160,7 +165,7 @@ services:
     environment:
       COUCHDB_USER: "root"
       COUCHDB_PASSWORD: "super_secure"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     labels:
@@ -187,7 +192,7 @@ services:
       - 'traefik.http.routers.saml.tls=true'
       - 'traefik.http.routers.saml.tls.certresolver=letsencrypt'
       - 'traefik.http.services.saml.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     # Public-hostname DNS resolution is provided by aliases on the
@@ -217,7 +222,7 @@ services:
       - 'traefik.http.routers.soap-sec.tls=true'
       - 'traefik.http.routers.soap-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.soap-sec.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
       - soap-internal
@@ -228,7 +233,7 @@ services:
     profiles: [soap]
     env_file:
       - flags_axis2-flag.env
-    restart: on-failure
+    restart: always
     networks:
       - soap-internal
     expose:
@@ -242,7 +247,7 @@ services:
       traefik:
         required: true
         condition: service_started
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     labels:
@@ -271,7 +276,7 @@ services:
       - 'traefik.http.routers.web-sec.tls=true'
       - 'traefik.http.routers.web-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.web-sec.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -297,7 +302,7 @@ services:
       - 'traefik.http.routers.xml-sec.tls=true'
       - 'traefik.http.routers.xml-sec.tls.certresolver=letsencrypt'
       - 'traefik.http.services.xml-sec.loadbalancer.server.port=80'
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
   # Catcher / Attacker service
@@ -332,7 +337,7 @@ services:
       - "traefik.http.routers.catcher.tls.domains[0].main=${CATCHER_HOST}"
       - "traefik.http.routers.catcher.tls.domains[0].sans=*.${CATCHER_HOST}"
       - "traefik.http.services.catcher.loadbalancer.server.port=3000"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     # Catcher's mSP template POSTs token-exchange / userinfo requests at
@@ -363,7 +368,7 @@ services:
       - BOT_OIDC_ALLOWED_ATTACKS=secure:or-1,secure:or-2,secure:or-3,secure:or-4,secure:redir-2,secure:cr-1,cr-2:cr-2,cr-3:cr-3,secure:cr-4,secure:xss-1,trc-1:secure,trc-2:secure
     expose:
       - "1338"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
     labels:
@@ -387,7 +392,7 @@ services:
       - "traefik.http.services.rookies.loadbalancer.server.port=3000"
       - "traefik.http.routers.rookies.tls.certresolver=letsencrypt"
       - "com.centurylinklabs.watchtower.enable=true"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -395,7 +400,7 @@ services:
   passkeys-app:
     image: ghcr.io/ehacking-websec/fun-with-flags-and-passkeys:latest
     profiles: [passkeys]
-    restart: on-failure
+    restart: always
     pull_policy: always
     networks:
       - ehacking
@@ -427,7 +432,7 @@ services:
   passkeys-mongo:
     image: mongo:4
     profiles: [passkeys]
-    restart: on-failure
+    restart: always
     pull_policy: always
     networks:
       - ehacking
@@ -438,7 +443,7 @@ services:
   crawling-maze:
     image: ghcr.io/ehacking-websec/crawling-maze:latest
     profiles: [maze]
-    restart: on-failure
+    restart: always
     pull_policy: always
     networks:
       - ehacking
@@ -488,7 +493,7 @@ services:
       - "traefik.http.routers.recruiting-challenge.tls.domains[0].main=${RECRUITING_TIER_HOST}"
       - "traefik.http.routers.recruiting-challenge.tls.domains[0].sans=*.${RECRUITING_TIER_HOST},*.${RECRUITING_CHALLENGE_HOST}"
       - "traefik.http.services.recruiting-challenge.loadbalancer.server.port=3000"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -530,7 +535,7 @@ services:
       - "traefik.http.routers.recruiting-bot.tls=true"
       - "traefik.http.routers.recruiting-bot.tls.certresolver=letsencrypt"
       - "traefik.http.services.recruiting-bot.loadbalancer.server.port=1337"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -562,7 +567,7 @@ services:
       - "traefik.http.routers.recruiting-instructor.tls.certresolver=letsencrypt"
       - "traefik.http.routers.recruiting-instructor.middlewares=basicauth@file"
       - "traefik.http.services.recruiting-instructor.loadbalancer.server.port=3000"
-    restart: on-failure
+    restart: always
     networks:
       - ehacking
 
@@ -589,7 +594,7 @@ services:
       - WATCHTOWER_SCHEDULE=0 0 7 * * * # every day on 7am
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    restart: on-failure
+    restart: always
 
 networks:
   ehacking:
