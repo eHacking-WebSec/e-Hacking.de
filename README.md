@@ -294,6 +294,23 @@ so `just up` and `just update` check first:
 Both thresholds come from `bin/disk.sh` (`DISK_WARN_GIB` / `DISK_MIN_GIB`).
 `SKIP_DISK_CHECK=1 just up` overrides once.
 
+Two locations matter, and on a host with split LVs they are different
+filesystems: the **image store** (`~/.local/share/containers/storage` under
+rootless podman) and the **pull staging dir**, where blobs are written
+before they land in the store. podman stages in `/var/tmp` by default —
+a 5 GiB `/var` will fail a multi-GiB pull with `no space left on device`
+while the image store still has 90 GiB free. Move staging next to the
+images:
+
+```bash
+mkdir -p ~/.config/containers
+# under [engine] in ~/.config/containers/containers.conf:
+image_copy_tmp_dir = "storage"
+```
+
+`just disk-check` reports both and points this out when staging is on the
+smaller filesystem.
+
 ```bash
 just disk-check   # free space + what the runtime can reclaim
 just prune        # dangling images, stopped containers, build cache

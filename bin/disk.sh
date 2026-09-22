@@ -54,17 +54,46 @@ if [ -n "$RUNTIME" ]; then
     [ -n "$graphroot" ] || graphroot=$("$RUNTIME" info --format '{{.DockerRootDir}}' 2>/dev/null || true)
 fi
 [ -n "$graphroot" ] || graphroot="${HOME}/.local/share/containers/storage"
-# On a fresh host the directory may not exist yet — walk up to the nearest
-# existing ancestor so df has a real target.
-probe="$graphroot"
-while [ ! -e "$probe" ] && [ "$probe" != "/" ]; do probe=$(dirname "$probe"); done
 
-free_gib() {
+# Where blobs are STAGED during a pull — a different filesystem on a host
+# with split LVs, and the one that actually runs out first. podman's
+# containers/image writes here (containers.conf `image_copy_tmp_dir`,
+# default /var/tmp, overridable with TMPDIR); docker stages inside its own
+# data-root, which the graphroot check already covers.
+stagedir=""
+if [ "${RUNTIME:-}" = "podman" ]; then
+    stagedir="${TMPDIR:-}"
+    if [ -z "$stagedir" ]; then
+        for cc in "${HOME}/.config/containers/containers.conf" /etc/containers/containers.conf; do
+            [ -f "$cc" ] || continue
+            stagedir=$(sed -n 's/^[[:space:]]*image_copy_tmp_dir[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$cc" | tail -n1 || true)
+            [ -n "$stagedir" ] && break
+        done
+    fi
+    [ -n "$stagedir" ] || stagedir="/var/tmp"
+    # "storage" means "next to the images" — then it is not a separate risk.
+    [ "$stagedir" = "storage" ] && stagedir=""
+fi
+
+# On a fresh host a directory may not exist yet — walk up to the nearest
+# existing ancestor so df has a real target.
+nearest() {
+    local pr="$1"
+    while [ ! -e "$pr" ] && [ "$pr" != "/" ]; do pr=$(dirname "$pr"); done
+    printf '%s\n' "$pr"
+}
+
+free_gib_at() {
     local kb
-    kb=$(df -Pk "$probe" 2>/dev/null | awk 'NR==2{print $4}')
+    kb=$(df -Pk "$(nearest "$1")" 2>/dev/null | awk 'NR==2{print $4}')
     [[ "$kb" =~ ^[0-9]+$ ]] || { printf '%s\n' ""; return; }
     printf '%s\n' $(( kb / 1024 / 1024 ))
 }
+
+fs_of() { df -P "$(nearest "$1")" 2>/dev/null | awk 'NR==2{print $1}'; }
+
+probe="$graphroot"
+free_gib() { free_gib_at "$graphroot"; }
 
 show_reclaimable() {
     info ""
@@ -82,31 +111,57 @@ do_check() {
         info "Disk check skipped (SKIP_DISK_CHECK is set)."
         return 0
     fi
-    local avail
-    avail=$(free_gib)
-    if [ -z "$avail" ]; then
-        warn "Could not determine free space at ${graphroot} — continuing."
-        return 0
+    # Both locations matter, and they are often different filesystems:
+    # the image store is where layers end up, the staging dir is where a
+    # pull writes blobs first. Either running out kills the pull.
+    local rc=0 shown=0 path avail label
+    for pair in "images:${graphroot}" ${stagedir:+"pull staging:${stagedir}"}; do
+        label=${pair%%:*}; path=${pair#*:}
+        avail=$(free_gib_at "$path")
+        if [ -z "$avail" ]; then
+            warn "Could not determine free space at ${path} — continuing."
+            continue
+        fi
+        if [ "$avail" -lt "$MIN_GIB" ]; then
+            [ "$shown" -eq 0 ] && { say "Disk space"; shown=1; }
+            bad "${label}: only ${avail} GiB free at ${path} (floor: ${MIN_GIB} GiB)."
+            rc=1
+        elif [ "$avail" -lt "$WARN_GIB" ]; then
+            [ "$shown" -eq 0 ] && { say "Disk space"; shown=1; }
+            warn "${label}: ${avail} GiB free at ${path} — below the ${WARN_GIB} GiB"
+            warn "the CTF images want. Clean up soon."
+        else
+            good "${label}: ${avail} GiB free at ${path}"
+        fi
+    done
+
+    # The classic trap: plenty of room for the images, but the staging dir
+    # sits on a small /var and the pull dies there with "no space left on
+    # device" while this check reported everything fine.
+    if [ -n "$stagedir" ] && [ "$(fs_of "$stagedir")" != "$(fs_of "$graphroot")" ]; then
+        local sa ga
+        sa=$(free_gib_at "$stagedir"); ga=$(free_gib_at "$graphroot")
+        if [ -n "$sa" ] && [ -n "$ga" ] && [ "$sa" -lt "$ga" ]; then
+            [ "$shown" -eq 0 ] && { say "Disk space"; shown=1; }
+            warn "Pull staging (${stagedir}) is on a smaller filesystem than the"
+            warn "image store (${graphroot}). A multi-GiB pull will fail there"
+            warn "first. Move staging next to the images:"
+            info "  mkdir -p ~/.config/containers"
+            info "  # add under [engine] in ~/.config/containers/containers.conf:"
+            info "  image_copy_tmp_dir = \"storage\""
+        fi
     fi
-    if [ "$avail" -lt "$MIN_GIB" ]; then
-        say "Disk space"
-        bad "Only ${avail} GiB free at ${graphroot} (floor: ${MIN_GIB} GiB)."
+
+    if [ "$rc" -ne 0 ]; then
         bad "Refusing to pull — a disk that fills mid-pull leaves the stack"
         bad "in a half-updated state that is worse than not starting."
         show_reclaimable
         info ""
         info "To override once:  SKIP_DISK_CHECK=1 just up"
-        return 1
-    fi
-    if [ "$avail" -lt "$WARN_GIB" ]; then
-        say "Disk space"
-        warn "${avail} GiB free at ${graphroot} — below the ${WARN_GIB} GiB"
-        warn "the CTF images want. Continuing, but clean up soon."
+    elif [ "$shown" -ne 0 ]; then
         show_reclaimable
-        return 0
     fi
-    good "${avail} GiB free at ${graphroot}"
-    return 0
+    return $rc
 }
 
 do_prune() {
