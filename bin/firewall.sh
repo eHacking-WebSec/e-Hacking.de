@@ -294,8 +294,11 @@ EOF
     warn "into their own config instead."
 }
 
+# -n: never prompt. `check` advertises itself as working without root, so it
+# must degrade to its behavioural probe instead of stopping at a password
+# prompt the caller did not ask for.
 SUDO_RO=""
-[ "$(id -u)" -eq 0 ] || SUDO_RO="sudo"
+[ "$(id -u)" -eq 0 ] || SUDO_RO="sudo -n"
 
 case "${1:-check}" in
     check)   do_check ;;
