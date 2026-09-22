@@ -114,27 +114,43 @@ do_check() {
     # public hostname is locally-originated, so it takes nat/OUTPUT — the
     # same path a container takes (rootless podman egress is a host-side
     # socket). If this works, the hairpin works.
+    #
+    # It MUST be a hostname that resolves to this host. A CDN-proxied name
+    # resolves to the CDN, so the request leaves the box and comes back as
+    # ordinary inbound traffic through nat/PREROUTING — it would pass with
+    # no OUTPUT rule in place at all and report a hairpin that does not
+    # exist. $IPS already holds our own addresses, so pick a name that maps
+    # into it.
     say "Hairpin probe (no root needed)"
-    local host1
-    host1=$(for f in .env modules.env; do
-        [ -f "$f" ] || continue
-        sed -n 's/\r$//; s/^HOST1=\(.*\)$/\1/p' "$f"
-    done | tail -n1 || true)
-    if [ -z "$host1" ]; then
-        warn "HOST1 not set in .env — skipping."
+    local probe_host="" h hips
+    for h in $(for f in .env modules.env; do
+            [ -f "$f" ] || continue
+            sed -n 's/\r$//; s/^\(CATCHER_HOST\|SP_HOST\|IDP_HOST\|HOST1\)=\(.*\)$/\2/p' "$f"
+        done || true); do
+        hips=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u || true)
+        for ip in $hips; do
+            if printf '%s\n' $IPS | grep -qxF "$ip"; then probe_host="$h"; break 2; fi
+        done
+    done
+    if [ -z "$probe_host" ]; then
+        warn "No configured hostname resolves to one of this host's own"
+        warn "addresses — every one of them is behind a CDN or points"
+        warn "elsewhere. The hairpin cannot be probed from here."
     elif ! command -v curl >/dev/null 2>&1; then
         warn "curl not installed — skipping."
     else
         local code
         code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-                 "https://${host1}/" 2>/dev/null || true)
+                 "https://${probe_host}/" 2>/dev/null || true)
         if [ -n "$code" ] && [ "$code" != "000" ]; then
-            good "https://${host1}/ from this host -> HTTP ${code}"
+            good "https://${probe_host}/ from this host -> HTTP ${code}"
         else
-            bad "https://${host1}/ from this host is unreachable"
-            info "That is the hairpin: containers resolving a public hostname"
-            info "fail the same way. Fix with 'just firewall-hairpin' or have"
-            info "the admin add the nat/OUTPUT rules."
+            bad "https://${probe_host}/ from this host is unreachable"
+            info "That is the hairpin. The OIDC SP fetches a catcher salt"
+            info "subdomain server-side for the mIdP challenges and fails the"
+            info "same way ('ConnectException: Connection refused')."
+            info "Fix with 'just firewall-hairpin', or have the admin add the"
+            info "nat/OUTPUT rules."
             rc=1
         fi
     fi
