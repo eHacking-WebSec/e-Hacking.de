@@ -154,10 +154,43 @@ if ! compose_cfg=$(./bin/compose config 2>&1); then
     echo "Create it, then re-run:  ./bin/restore.sh -y $ARCHIVE" >&2
     exit 1
 fi
+# Four ways to learn the project name, most authoritative first. Parsing
+# `config` output is not enough on its own: whether it carries a top-level
+# `name:` key depends on the compose-go provider's version, and `podman
+# compose` delegates to whatever binary the host happens to have.
 PROJECT=$(printf '%s\n' "$compose_cfg" | sed -n 's/^name: //p' | head -n1)
+
+if [ -z "${PROJECT:-}" ]; then
+    PROJECT=$(./bin/compose config --format json 2>/dev/null \
+        | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+fi
+
+if [ -z "${PROJECT:-}" ]; then
+    # Explicit override, wherever Compose would read it from.
+    PROJECT="${COMPOSE_PROJECT_NAME:-}"
+    if [ -z "$PROJECT" ]; then
+        for f in .env modules.env; do
+            [ -f "$f" ] || continue
+            PROJECT=$(sed -n 's/\r$//; s/^COMPOSE_PROJECT_NAME=\(.*\)$/\1/p' "$f" | tail -n1 || true)
+            [ -n "$PROJECT" ] && break
+        done
+    fi
+fi
+
+if [ -z "${PROJECT:-}" ]; then
+    # Compose's own fallback: the project directory's basename, lowercased,
+    # with everything outside [a-z0-9_-] dropped. `e-Hacking.de` -> `e-hackingde`.
+    PROJECT=$(basename "$ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+    echo "Note: derived the compose project name from the directory: $PROJECT" >&2
+fi
+
 if [ -z "${PROJECT:-}" ]; then
     echo "Could not determine the compose project name after restoring files." >&2
-    echo "Restore the volumes manually, or fix the env files and re-run." >&2
+    echo "The compose config starts with:" >&2
+    printf '%s\n' "$compose_cfg" | head -n5 | sed 's/^/    /' >&2
+    echo >&2
+    echo "Set it explicitly and re-run:" >&2
+    echo "  COMPOSE_PROJECT_NAME=<name> ./bin/restore.sh -y $ARCHIVE" >&2
     exit 1
 fi
 
