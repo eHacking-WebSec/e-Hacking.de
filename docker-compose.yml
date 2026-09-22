@@ -52,18 +52,10 @@ services:
       - "${TRAEFIK_SOCK_MOUNT:-/var/run/docker.sock:/var/run/docker.sock:ro}"
     restart: always
     networks:
-      ehacking:
-        # Internal DNS aliases so containers can resolve the public
-        # hostnames (idp.e-hacking.de etc.) back to traefik instead of
-        # going through public DNS. Replaces the per-service `links:`
-        # blocks that used to live on oidc/saml — Podman rejects
-        # `links:` outright. Docker also works fine with aliases.
-        aliases:
-          - ${SP_HOST}
-          - ${SPA_HOST}
-          - ${IDP_HOST}
-          - ${RS_HOST}
-          - ${CATCHER_HOST}
+      # No aliases needed any more. They covered five hostnames back when
+      # each one had to be listed; the `dns` service now answers for both
+      # whole zones, including the catcher's unbounded salt subdomains.
+      - ehacking
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)'

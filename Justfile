@@ -118,22 +118,27 @@ backup:
 restore:
     ./bin/restore.sh
 
-# Report whether the host firewall is wired up for the 80->10080 /
-# 443->10443 split: inbound redirect (admin-managed), the nat/OUTPUT
-# hairpin rules (ours), and whether the stack is actually listening.
-# Read-only.
+# Report whether the host firewall matches the 80->10080 / 443->10443
+# split: the inbound redirect, the INPUT accepts, and whether anything is
+# listening behind them. Read-only.
 firewall-check:
     ./bin/firewall.sh check
 
-# Add the nat/OUTPUT redirects so containers reaching a public hostname
-# (the OIDC SP fetching a catcher salt subdomain, for one) land back on
-# traefik instead of a closed port. Idempotent; prompts for sudo.
-firewall-hairpin:
-    ./bin/firewall.sh hairpin
+# Report whether containers can reach the platform under the hostnames
+# students use — including a catcher salt subdomain nobody has created.
+# This is what the mIdP challenges and out-of-band XXE/SSRF depend on.
+dns-check:
+    ./bin/dns.sh check
 
-# Make `firewall-hairpin` survive a reboot via a systemd unit.
-firewall-persist:
-    ./bin/firewall.sh persist
+# Report whether the stack survives logging out and rebooting: linger, the
+# podman-restart unit, and the restart policy. Read-only, no root.
+linger:
+    ./bin/linger.sh check
+
+# Turn on what `just linger` reports as missing. The podman-restart unit
+# needs no root; enabling linger asks for sudo once.
+linger-enable:
+    ./bin/linger.sh enable
 
 # Prepare a bare server to run the stack, then restore a backup if one is
 # present (else tell you what's still needed). Root-free by default: steps

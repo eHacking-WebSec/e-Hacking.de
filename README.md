@@ -134,11 +134,9 @@ Keep `10080` / `10443` unreachable from the internet. A client that
 addresses them directly puts the port in its `Host` header, which lands
 in the discovery `issuer` and breaks the OIDC flows for that client.
 
-**Check with the firewall admin** that the redirect also covers
-locally-originated traffic (the `OUTPUT` chain, not just `PREROUTING`).
-Container→container traffic to the public hostnames is resolved
-in-network by the traefik aliases and never leaves the box, so this only
-matters if something hairpins off the host's own public IP.
+Containers never take this path: they resolve the platform's hostnames to
+traefik in-network instead — see "In-network name resolution". These rules
+only carry traffic arriving from outside.
 
 ## Deploying without root
 
@@ -172,6 +170,23 @@ silently prompting. On a prepared host no such step is reached. To let it
 do the host preparation itself — a bare server you do own root on — run
 `ALLOW_SUDO=1 just init-podman`.
 
+### Surviving logout and reboot
+
+Rootless podman runs the containers under your own user, and systemd tears
+that user's instance down when your last session ends — so closing the SSH
+connection would stop the platform. "Linger" keeps the instance alive with
+nobody logged in.
+
+Linger alone starts nothing, though. Three pieces have to line up:
+`restart: always` on the services (already in `docker-compose.yml`),
+`podman-restart.service` to start them after a reboot, and linger so the
+user manager is there to do it.
+
+```bash
+just linger          # report all three, read-only
+just linger-enable   # turn on what is missing; sudo once for linger
+```
+
 ### Firewall rules for the host admin
 
 Public 80/443 must reach the ports the stack publishes, and the host must
@@ -186,19 +201,6 @@ iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-ports 10443
 iptables -A <input-chain> -p tcp --dport 10080 -m conntrack --ctstate DNAT -j ACCEPT
 iptables -A <input-chain> -p tcp --dport 10443 -m conntrack --ctstate DNAT -j ACCEPT
 
-# 3. Hairpin — REQUIRED, and the one a PREROUTING-only setup misses
-iptables -t nat -A OUTPUT -d <public-ip> -p tcp --dport 443 -j REDIRECT --to-ports 10443
-iptables -t nat -A OUTPUT -d <public-ip> -p tcp --dport 80  -j REDIRECT --to-ports 10080
-```
-
-Rule 3 exists because several containers resolve a *public* hostname and
-connect to it — above all the OIDC SP, which server-side fetches
-`<salt>.${CATCHER_HOST}/.well-known/openid-configuration` for the mIdP
-challenges. Wildcard subdomains cannot be compose network aliases, so that
-lookup goes through public DNS to this machine's own address. Such traffic
-is locally-originated: it takes `nat/OUTPUT`, never `nat/PREROUTING`.
-Before the port split it worked only because podman itself bound
-`0.0.0.0:443`.
 
 The `--ctstate DNAT` match in rule 2 keeps the published ports reachable
 only through the redirect. Without it `https://host:10443/` answers
@@ -207,10 +209,8 @@ which ends up in the OIDC discovery `issuer` and breaks ids-1/ids-3/ids-4
 for that client. Verify before relying on it — a wrong match takes the
 site down.
 
-`just firewall-check` reports on all three groups plus whether anything is
-listening, and runs a behavioural hairpin probe that needs no root. If the
-admin cannot add rule 3, `just firewall-hairpin` adds it locally and
-`just firewall-persist` makes it survive a reboot — both need sudo.
+`just firewall-check` reports both groups plus whether anything is
+listening. It needs no root; the rule inspection is skipped without it.
 
 ## In-network name resolution
 

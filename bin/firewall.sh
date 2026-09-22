@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
-# Host firewall helpers for the 80->10080 / 443->10443 port split.
+# Check the host firewall against the 80->10080 / 443->10443 port split.
 #
-# The redirect itself (nat/PREROUTING) and the INPUT accepts for the
-# published ports are managed by the host admin. What this script adds is
-# the piece their tooling cannot cover: nat/OUTPUT.
+# Read-only. The inbound redirect (nat/PREROUTING) and the INPUT accepts for
+# the published ports are managed by the host admin; this reports whether
+# they are in place and whether anything is listening behind them.
 #
-# Why OUTPUT is needed. Several containers resolve a PUBLIC hostname and
-# connect to it — most importantly the OIDC SP, which server-side fetches
-# `<salt>.<CATCHER_HOST>/.well-known/openid-configuration` for the mIdP
-# challenges (ids-1..ids-4). Wildcard subdomains cannot be compose network
-# aliases, so those lookups go through public DNS to this machine's own
-# address. That is locally-originated traffic: it traverses nat/OUTPUT, not
-# nat/PREROUTING, so the admin's redirect does not apply. Before the port
-# split it worked by accident, because podman itself bound 0.0.0.0:443.
+# It used to also add nat/OUTPUT rules so containers could reach
+# the platform through the host's public address. That was the wrong layer:
+# rootless podman's egress traverses neither nat/PREROUTING nor nat/OUTPUT,
+# measured on this host (container -> <public-ip>:443 REFUSED while :10443
+# was OPEN). Containers now resolve the platform's hostnames to traefik
+# in-network instead — see dns/Corefile and `just dns-check`.
 #
-# Subcommands:
 #   check    read-only diagnosis; exits non-zero if something is missing
-#   hairpin  add the nat/OUTPUT redirects (idempotent, needs sudo)
-#   persist  install a systemd unit that re-applies `hairpin` on boot
 #
-# Override the detected addresses with PUBLIC_IPS="1.2.3.4 5.6.7.8".
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -29,17 +23,6 @@ info() { printf '    %s\n' "$*"; }
 warn() { printf '    \033[33m! %s\033[0m\n' "$*" >&2; }
 bad()  { printf '    \033[31m✗ %s\033[0m\n' "$*" >&2; }
 good() { printf '    \033[32m✓ %s\033[0m\n' "$*"; }
-
-need_sudo() {
-    if [ "$(id -u)" -eq 0 ]; then SUDO=""; return; fi
-    command -v sudo >/dev/null 2>&1 || { echo "needs root and sudo is missing" >&2; exit 1; }
-    SUDO="sudo"
-}
-
-require_iptables() {
-    command -v iptables >/dev/null 2>&1 \
-        || { echo "iptables not found" >&2; exit 1; }
-}
 
 # Host ports from .env (modules.env wins), matching bin/compose's file order.
 port_from_env() {  # port_from_env VAR DEFAULT
@@ -56,45 +39,7 @@ HOST_HTTPS=$(port_from_env HOST_PORT_HTTPS 443)
 PUB_HTTP=$(port_from_env PORT_HTTP 80)
 PUB_HTTPS=$(port_from_env PORT_HTTPS 443)
 
-# The addresses a container actually reaches when it resolves one of our
-# public hostnames — intersected with the addresses this host actually
-# holds. Both halves are needed:
-#
-#   * DNS alone is wrong. A hostname behind a CDN (e-hacking.de is
-#     Cloudflare-proxied) resolves to the CDN's anycast addresses, and
-#     redirecting those would hijack the host's own outbound HTTPS to
-#     every site on that range.
-#   * `ip addr` alone is wrong too: it yields the podman/docker bridge
-#     gateways (10.88.0.1, 172.17.0.1, …) that nothing resolves to.
-#
-# Their intersection is exactly "our own address, reachable under a public
-# name" — which is what hairpins back to us.
-detect_ips() {
-    local hosts h resolved="" local_addrs ip
-    hosts=$(for f in .env modules.env; do
-        [ -f "$f" ] || continue
-        sed -n 's/\r$//; s/^\(HOST1\|HOST2\|CATCHER_HOST\|IDP_HOST\|SP_HOST\|SPA_HOST\|RS_HOST\)=\(.*\)$/\2/p' "$f"
-    done | sort -u || true)
-    for h in $hosts; do
-        resolved="$resolved $(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u || true)"
-    done
-    local_addrs=$(ip -4 -o addr show scope global 2>/dev/null \
-        | awk '{split($4,a,"/"); print a[1]}' | sort -u || true)
-    for ip in $(printf '%s\n' $resolved | sort -u); do
-        printf '%s\n' $local_addrs | grep -qxF "$ip" && printf '%s\n' "$ip"
-    done
-    return 0
-}
-IPS=${PUBLIC_IPS:-$(detect_ips)}
-
 # ----------------------------------------------------------------------
-
-# The hairpin rule, in one place. -C only matches a rule specified exactly
-# as it was added, so check, add and delete must all use this spec — the
-# `-m comment` included.
-hairpin_rule() {  # hairpin_rule <ip> <from-port> <to-port>
-    printf '%s\n' "-d $1 -p tcp --dport $2 -j REDIRECT --to-ports $3 -m comment --comment eHacking-hairpin"
-}
 
 do_check() {
     local rc=0
@@ -117,67 +62,6 @@ do_check() {
         fi
     done
 
-    # The probe has to run INSIDE a container on the compose network, not
-    # in the host shell. Measured on the deploy host: a container reaching
-    # <public-ip>:443 gets REFUSED while :10443 is OPEN — rootless podman's
-    # egress traverses neither the host's nat/PREROUTING nor its nat/OUTPUT,
-    # so a host-side curl proves nothing about the path that actually
-    # matters (the OIDC SP fetching a catcher salt subdomain server-side).
-    say "Hairpin probe — from inside the compose network"
-    local probe_host="" h hips ip
-    for h in $(for f in .env modules.env; do
-            [ -f "$f" ] || continue
-            sed -n 's/\r$//; s/^\(CATCHER_HOST\|SP_HOST\|IDP_HOST\|HOST1\)=\(.*\)$/\2/p' "$f"
-        done || true); do
-        hips=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u || true)
-        for ip in $hips; do
-            if printf '%s\n' $IPS | grep -qxF "$ip"; then probe_host="$h"; break 2; fi
-        done
-    done
-
-    local net=""
-    net=$(./bin/compose config --format json 2>/dev/null \
-        | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
-    [ -n "$net" ] && net="${net}_ehacking"
-
-    if [ -z "$probe_host" ]; then
-        warn "No configured hostname resolves to one of this host's own"
-        warn "addresses — the hairpin cannot be probed from here."
-    elif [ -z "$RUNTIME" ]; then
-        warn "No container runtime — skipping the probe."
-    elif ! "$RUNTIME" network exists "$net" 2>/dev/null \
-         && ! "$RUNTIME" network inspect "$net" >/dev/null 2>&1; then
-        warn "Compose network '${net}' not found — is the stack up?"
-    else
-        local out
-        # --dns is not optional: `dns:` is a compose-service setting, so a
-        # throwaway container does NOT inherit the in-network resolver and
-        # would resolve the public name through public DNS — reporting a
-        # failure that the running services do not have.
-        local resolver
-        resolver=$(for f in .env modules.env; do
-            [ -f "$f" ] || continue
-            sed -n 's/\r$//; s/^DNS_RESOLVER_IP=\(.*\)$/\1/p' "$f"
-        done | tail -n1 || true)
-        out=$("$RUNTIME" run --rm --network "$net" ${resolver:+--dns "$resolver"} \
-                docker.io/library/alpine \
-                sh -c "echo | nc -w5 ${probe_host} ${PUB_HTTPS} >/dev/null 2>&1 \
-                       && echo OPEN || echo REFUSED" 2>/dev/null || true)
-        case "$out" in
-            OPEN)
-                good "a container reaches ${probe_host}:${PUB_HTTPS}" ;;
-            REFUSED)
-                bad "a container CANNOT reach ${probe_host}:${PUB_HTTPS}"
-                info "The OIDC SP fetches <salt>.${probe_host}/.well-known/..."
-                info "server-side for the mIdP challenges and fails the same"
-                info "way ('ConnectException: Connection refused'). Host nat"
-                info "rules do not govern this path — the fix is to make the"
-                info "name resolve inside the compose network."
-                rc=1 ;;
-            *)
-                warn "Probe inconclusive (could not run the helper container)." ;;
-        esac
-    fi
     info "Inbound (the internet -> ${PUB_HTTPS} -> ${HOST_HTTPS}) cannot be"
     info "probed from here — it needs a request from outside this host."
 
@@ -218,27 +102,6 @@ do_check() {
         fi
     done
 
-    say "nat/OUTPUT — hairpin (ours)"
-    if [ -z "$IPS" ]; then
-        bad "No configured hostname resolves to an address this host holds."
-        info "Either this is not the deploy host, or it sits behind 1:1 NAT"
-        info "and does not carry its public address. In the latter case set"
-        info "PUBLIC_IPS=\"<addr>\" explicitly."
-        return 1
-    fi
-    for ip in $IPS; do
-        for pair in "${PUB_HTTP}:${HOST_HTTP}" "${PUB_HTTPS}:${HOST_HTTPS}"; do
-            local from=${pair%%:*} to=${pair##*:}
-            # shellcheck disable=SC2046  # the spec must word-split
-            if $SUDO_RO iptables -t nat -C OUTPUT $(hairpin_rule "$ip" "$from" "$to") 2>/dev/null; then
-                good "${ip}:${from} -> ${to}"
-            else
-                bad "missing: ${ip}:${from} -> ${to}   (just firewall-hairpin)"
-                rc=1
-            fi
-        done
-    done
-
     say "Direct exposure of the published ports"
     info "A client reaching ${HOST_HTTPS} directly puts that port in its Host"
     info "header, which lands in the OIDC discovery issuer and breaks"
@@ -249,77 +112,13 @@ do_check() {
     return $rc
 }
 
-do_hairpin() {
-    require_iptables
-    need_sudo
-    if [ -z "$IPS" ]; then
-        bad "No configured hostname resolves to an address this host holds —"
-        bad "refusing to guess which address to redirect."
-        info "Set PUBLIC_IPS=\"<addr>\" if this host is behind 1:1 NAT."
-        exit 1
-    fi
-    if [ "$HOST_HTTP" = "$PUB_HTTP" ] && [ "$HOST_HTTPS" = "$PUB_HTTPS" ]; then
-        info "Host ports equal the public ports — no hairpin rule needed."
-        return 0
-    fi
-    say "nat/OUTPUT redirects"
-    for ip in $IPS; do
-        for pair in "${PUB_HTTP}:${HOST_HTTP}" "${PUB_HTTPS}:${HOST_HTTPS}"; do
-            local from=${pair%%:*} to=${pair##*:}
-            # shellcheck disable=SC2046  # the spec must word-split
-            if $SUDO iptables -t nat -C OUTPUT $(hairpin_rule "$ip" "$from" "$to") 2>/dev/null; then
-                info "already present: ${ip}:${from} -> ${to}"
-            else
-                info "adding: ${ip}:${from} -> ${to}"
-                $SUDO iptables -t nat -A OUTPUT $(hairpin_rule "$ip" "$from" "$to")
-            fi
-        done
-    done
-    info "Not persistent yet — run 'just firewall-persist' to survive a reboot."
-}
-
-do_persist() {
-    require_iptables
-    need_sudo
-    local unit=/etc/systemd/system/ehacking-firewall.service
-    say "systemd unit"
-    # A unit that re-runs this script is deliberately chosen over
-    # iptables-save: the admin's HARDENING_*/SERVICE_*/DEFAULT_* chains are
-    # generated by their own tooling, and dumping the live ruleset would
-    # freeze a copy of it that then drifts from their config.
-    $SUDO tee "$unit" >/dev/null <<EOF
-[Unit]
-Description=eHacking: nat/OUTPUT hairpin redirects for the published ports
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=$(pwd)
-ExecStart=$(pwd)/bin/firewall.sh hairpin
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    info "wrote ${unit}"
-    $SUDO systemctl daemon-reload
-    $SUDO systemctl enable --now ehacking-firewall.service
-    good "enabled — rules are re-applied on boot"
-    warn "If the admin's firewall tooling flushes the nat table at runtime,"
-    warn "the rules go with it. Then ask them to adopt the two OUTPUT rules"
-    warn "into their own config instead."
-}
-
-# -n: never prompt. `check` advertises itself as working without root, so it
-# must degrade to its behavioural probe instead of stopping at a password
+# -n: never prompt. This is a read-only check and advertises itself as
+# working without root, so it degrades instead of stopping at a password
 # prompt the caller did not ask for.
 SUDO_RO=""
 [ "$(id -u)" -eq 0 ] || SUDO_RO="sudo -n"
 
 case "${1:-check}" in
-    check)   do_check ;;
-    hairpin) do_hairpin ;;
-    persist) do_persist ;;
-    *) echo "usage: $0 [check|hairpin|persist]" >&2; exit 1 ;;
+    check) do_check ;;
+    *) echo "usage: $0 check" >&2; exit 1 ;;
 esac
