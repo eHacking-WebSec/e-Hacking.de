@@ -56,21 +56,34 @@ HOST_HTTPS=$(port_from_env HOST_PORT_HTTPS 443)
 PUB_HTTP=$(port_from_env PORT_HTTP 80)
 PUB_HTTPS=$(port_from_env PORT_HTTPS 443)
 
-# The addresses a container actually reaches. Derived from the configured
-# hostnames via public DNS, not from the interface list: `ip addr` also
-# yields the podman/docker bridge gateways (10.88.0.1, 172.17.0.1, …), and
-# redirecting those would add noise at best and capture container->gateway
-# traffic at worst.
+# The addresses a container actually reaches when it resolves one of our
+# public hostnames — intersected with the addresses this host actually
+# holds. Both halves are needed:
+#
+#   * DNS alone is wrong. A hostname behind a CDN (e-hacking.de is
+#     Cloudflare-proxied) resolves to the CDN's anycast addresses, and
+#     redirecting those would hijack the host's own outbound HTTPS to
+#     every site on that range.
+#   * `ip addr` alone is wrong too: it yields the podman/docker bridge
+#     gateways (10.88.0.1, 172.17.0.1, …) that nothing resolves to.
+#
+# Their intersection is exactly "our own address, reachable under a public
+# name" — which is what hairpins back to us.
 detect_ips() {
-    local hosts h out=""
+    local hosts h resolved="" local_addrs ip
     hosts=$(for f in .env modules.env; do
         [ -f "$f" ] || continue
-        sed -n 's/\r$//; s/^\(HOST1\|CATCHER_HOST\|IDP_HOST\|SP_HOST\)=\(.*\)$/\2/p' "$f"
+        sed -n 's/\r$//; s/^\(HOST1\|HOST2\|CATCHER_HOST\|IDP_HOST\|SP_HOST\|SPA_HOST\|RS_HOST\)=\(.*\)$/\2/p' "$f"
     done | sort -u || true)
     for h in $hosts; do
-        out="$out $(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u || true)"
+        resolved="$resolved $(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u || true)"
     done
-    printf '%s\n' $out | sort -u
+    local_addrs=$(ip -4 -o addr show scope global 2>/dev/null \
+        | awk '{split($4,a,"/"); print a[1]}' | sort -u || true)
+    for ip in $(printf '%s\n' $resolved | sort -u); do
+        printf '%s\n' $local_addrs | grep -qxF "$ip" && printf '%s\n' "$ip"
+    done
+    return 0
 }
 IPS=${PUBLIC_IPS:-$(detect_ips)}
 
@@ -166,7 +179,13 @@ do_check() {
     done
 
     say "nat/OUTPUT — hairpin (ours)"
-    [ -n "$IPS" ] || { bad "could not resolve the configured hostnames"; return 1; }
+    if [ -z "$IPS" ]; then
+        bad "No configured hostname resolves to an address this host holds."
+        info "Either this is not the deploy host, or it sits behind 1:1 NAT"
+        info "and does not carry its public address. In the latter case set"
+        info "PUBLIC_IPS=\"<addr>\" explicitly."
+        return 1
+    fi
     for ip in $IPS; do
         for pair in "${PUB_HTTP}:${HOST_HTTP}" "${PUB_HTTPS}:${HOST_HTTPS}"; do
             local from=${pair%%:*} to=${pair##*:}
@@ -193,7 +212,12 @@ do_check() {
 do_hairpin() {
     require_iptables
     need_sudo
-    [ -n "$IPS" ] || { echo "no global IPv4 address detected; set PUBLIC_IPS=" >&2; exit 1; }
+    if [ -z "$IPS" ]; then
+        bad "No configured hostname resolves to an address this host holds —"
+        bad "refusing to guess which address to redirect."
+        info "Set PUBLIC_IPS=\"<addr>\" if this host is behind 1:1 NAT."
+        exit 1
+    fi
     if [ "$HOST_HTTP" = "$PUB_HTTP" ] && [ "$HOST_HTTPS" = "$PUB_HTTPS" ]; then
         info "Host ports equal the public ports — no hairpin rule needed."
         return 0
