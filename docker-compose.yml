@@ -15,7 +15,6 @@ services:
       - '--entrypoints.websecure.address=:${PORT_HTTPS}'
       - '--entrypoints.websecure.http.sanitizePath=false'
       - '--entrypoints.websecure.http.tls=true'
-      - '--entrypoints.tcpsecure.address=:${PORT_TCP}'  # ← Separater Port für TCP
       - '--providers.docker=true'
       - '--providers.file.directory=/etc/traefik/dynamic'
       - '--providers.file.watch=true'
@@ -25,7 +24,6 @@ services:
     ports:
       - "${HOST_PORT_HTTP:-80}:${PORT_HTTP}"
       - "${HOST_PORT_HTTPS:-443}:${PORT_HTTPS}"
-      - "${PORT_TCP}:${PORT_TCP}"
     env_file:
       - cloudflare.env
     volumes:
