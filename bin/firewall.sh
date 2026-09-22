@@ -150,7 +150,17 @@ do_check() {
         warn "Compose network '${net}' not found — is the stack up?"
     else
         local out
-        out=$("$RUNTIME" run --rm --network "$net" docker.io/library/alpine \
+        # --dns is not optional: `dns:` is a compose-service setting, so a
+        # throwaway container does NOT inherit the in-network resolver and
+        # would resolve the public name through public DNS — reporting a
+        # failure that the running services do not have.
+        local resolver
+        resolver=$(for f in .env modules.env; do
+            [ -f "$f" ] || continue
+            sed -n 's/\r$//; s/^DNS_RESOLVER_IP=\(.*\)$/\1/p' "$f"
+        done | tail -n1 || true)
+        out=$("$RUNTIME" run --rm --network "$net" ${resolver:+--dns "$resolver"} \
+                docker.io/library/alpine \
                 sh -c "echo | nc -w5 ${probe_host} ${PUB_HTTPS} >/dev/null 2>&1 \
                        && echo OPEN || echo REFUSED" 2>/dev/null || true)
         case "$out" in
