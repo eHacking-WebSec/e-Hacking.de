@@ -92,7 +92,11 @@ services:
       - '-conf'
       - '/etc/coredns/Corefile'
     volumes:
-      - './dns/Corefile:/etc/coredns/Corefile:ro'
+      # `:z` = shared SELinux relabel. Without it the container is denied
+      # the file on an enforcing host and crash-loops with
+      # `open /etc/coredns/Corefile: permission denied`. Same reason
+      # bin/runtime-env.sh labels the podman socket mount.
+      - './dns/Corefile:/etc/coredns/Corefile:ro,z'
     environment:
       # The zones live in .env; the Corefile reads them via {$ZONE_*} so
       # they are not written down twice.
