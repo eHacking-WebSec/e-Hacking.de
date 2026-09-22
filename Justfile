@@ -18,9 +18,11 @@ default:
 
 # Bring the stack up in the background. Refuses to start if basicauth
 # isn't configured — without it the dashboard router would attach no
-# middleware and the API would be open. Run `just init` first.
+# middleware and the API would be open. Run `just init` first. Also
+# refuses on a nearly-full disk; override with SKIP_DISK_CHECK=1.
 up:
     @test -e traefik/dynamic/basicauth.yml || { echo "Missing traefik/dynamic/basicauth.yml — run 'just init' or 'just add-basicauth-user <name>' first."; exit 1; }
+    ./bin/disk.sh check
     ./bin/compose up -d
 
 # Tear the stack down (containers only; named volumes are kept).
@@ -30,6 +32,9 @@ down:
 # Pull-rebuild-restart cycle. Equivalent to `./bin/update.sh`.
 update:
     git pull
+    # Before the pull, not after: a disk that fills mid-pull leaves
+    # half-extracted layers behind.
+    ./bin/disk.sh check
     ./bin/compose pull
     # Top up flags_<svc>.env so new FLAG_ keys from freshly-pulled
     # images get a real value before the container starts. Existing
@@ -72,6 +77,21 @@ reset:
 # Traefik watches the file and hot-reloads, so no restart is needed.
 add-basicauth-user USER='':
     ./bin/make-auth.sh {{USER}}
+
+# Report free space at the container image store and what can be
+# reclaimed. Run automatically by `up` and `update`.
+disk-check:
+    ./bin/disk.sh check
+
+# Reclaim disk: dangling images, stopped containers, build cache. Safe —
+# touches nothing a configured module needs.
+prune:
+    ./bin/disk.sh prune
+
+# Also drop images no running container uses. Asks first: a module
+# disabled via COMPOSE_PROFILES would have to be pulled again.
+prune-all:
+    ./bin/disk.sh prune-all
 
 # Tail logs. Pass a service name to scope: `just logs catcher`.
 logs SERVICE='':

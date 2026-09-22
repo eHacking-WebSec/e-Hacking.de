@@ -147,32 +147,13 @@ else
 fi
 
 # ----------------------------------------------------------------------
-# Disk space at podman's image store. The CTF images add up to several
-# GiB; warn (but let the operator override) below a 10 GiB floor.
+# Disk space at podman's image store. Shared with `just up` / `just
+# update` via bin/disk.sh; here it stays advisory, because a bare-server
+# bootstrap may legitimately run before the volume is sized.
 # ----------------------------------------------------------------------
 
 say "Image store free space"
-MIN_GIB=10
-graphroot=$(podman info --format '{{.Store.GraphRoot}}' 2>/dev/null || true)
-[ -n "$graphroot" ] || graphroot="${HOME}/.local/share/containers/storage"
-# The store dir may not exist yet on a fresh install — walk up to the
-# nearest existing ancestor so df has a real target.
-probe="$graphroot"
-while [ ! -e "$probe" ] && [ "$probe" != "/" ]; do probe=$(dirname "$probe"); done
-avail_kb=$(df -Pk "$probe" 2>/dev/null | awk 'NR==2{print $4}')
-if ! [[ "$avail_kb" =~ ^[0-9]+$ ]]; then
-    warn "Could not determine free space at ${graphroot}."
-    confirm "Continue anyway?" || { info "Aborted."; exit 1; }
-else
-    avail_gib=$(( avail_kb / 1024 / 1024 ))
-    if [ "$avail_kb" -lt $(( MIN_GIB * 1024 * 1024 )) ]; then
-        warn "Only ${avail_gib} GiB free at ${graphroot} — below the ${MIN_GIB} GiB"
-        warn "recommended for the container images."
-        confirm "Continue anyway?" || { info "Aborted."; exit 1; }
-    else
-        info "${avail_gib} GiB free at ${graphroot} (>= ${MIN_GIB} GiB)."
-    fi
-fi
+./bin/disk.sh check || confirm "Continue anyway?" || { info "Aborted."; exit 1; }
 
 # ----------------------------------------------------------------------
 # 2. Rootless plumbing: subuid/subgid + the user socket.

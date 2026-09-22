@@ -281,6 +281,34 @@ just restart oidc
 If `just` is not installed, the equivalent flat script works:
 `./bin/update.sh` is the legacy one-shot of `just update`.
 
+## Disk space
+
+The CTF images add up to several GiB and every `pull` adds more. A disk
+that fills up mid-pull is the nastiest failure mode here — half-extracted
+layers, containers that won't start, a compose run that half-succeeded —
+so `just up` and `just update` check first:
+
+* below **10 GiB** free: warn, print what can be reclaimed, continue
+* below **3 GiB** free: refuse, before anything is pulled
+
+Both thresholds come from `bin/disk.sh` (`DISK_WARN_GIB` / `DISK_MIN_GIB`).
+`SKIP_DISK_CHECK=1 just up` overrides once.
+
+```bash
+just disk-check   # free space + what the runtime can reclaim
+just prune        # dangling images, stopped containers, build cache
+just prune-all    # also images no running container uses — asks first
+```
+
+`just prune` is safe: it touches nothing a configured module needs.
+`just prune-all` is not, in one specific way — a module disabled via
+`COMPOSE_PROFILES` has no running container, so its image is dropped and
+has to be pulled again on the next `just up`.
+
+Watchtower already runs with `WATCHTOWER_CLEANUP=true`, so the tagged
+predecessor of each auto-updated image is removed for you. What still
+accumulates is untagged layers from `compose pull`.
+
 ## Backup & migration
 
 Everything that makes a deployment unique lives *outside* git: the

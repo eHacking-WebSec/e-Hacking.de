@@ -13,6 +13,9 @@ cd "$(dirname "$0")/.."
 export COMPOSE_ENV_FILES=.env,cloudflare.env,bot.env,credentials.env
 
 git pull
+# Before the pull, not after: a disk that fills mid-pull leaves
+# half-extracted layers behind. SKIP_DISK_CHECK=1 overrides.
+./bin/disk.sh check
 ./bin/compose pull
 # Top up flags_<svc>.env with any new FLAG_ keys the freshly-pulled
 # images added. Existing values are preserved; without this step a new
