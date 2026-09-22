@@ -266,19 +266,31 @@ say "Deployment state"
 
 # Find a backup: explicit arg wins, else newest in backups/.
 backup=""
+backup_named=0
 if [ -n "$BACKUP_ARG" ]; then
     [ -f "$BACKUP_ARG" ] || { echo "Backup not found: $BACKUP_ARG" >&2; exit 1; }
     backup="$BACKUP_ARG"
+    backup_named=1
 else
     shopt -s nullglob
     found=(backups/*.tar.gz)
     shopt -u nullglob
-    [ "${#found[@]}" -gt 0 ] && backup=$(ls -t "${found[@]}" | head -n1)
+    if [ "${#found[@]}" -gt 0 ]; then
+        backup=$(ls -t "${found[@]}" | head -n1 || true)
+    fi
 fi
 
 if [ -n "$backup" ]; then
-    info "Found backup: $backup"
-    if confirm "Restore it now?"; then
+    # Naming an archive on the command line IS the decision — only ask when
+    # we picked one by ourselves.
+    restore=1
+    if [ "$backup_named" -eq 1 ]; then
+        info "Restoring the archive you named: $backup"
+    else
+        info "Found backup: $backup"
+        confirm "Restore it now?" || restore=0
+    fi
+    if [ "$restore" -eq 1 ]; then
         ./bin/restore.sh -y "$backup"
         echo
         say "Done"

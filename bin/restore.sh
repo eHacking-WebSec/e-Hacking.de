@@ -143,7 +143,18 @@ fi
 # 2. Volumes.
 # ----------------------------------------------------------------------
 
-PROJECT=$(./bin/compose config 2>/dev/null | sed -n 's/^name: //p' | head -n1)
+# Capture stderr rather than discarding it: `set -e` + `pipefail` would
+# otherwise kill the script on the assignment, before the diagnosis below
+# ever runs, and the reason (usually a missing env_file) would be lost.
+if ! compose_cfg=$(./bin/compose config 2>&1); then
+    echo "Could not read the compose config after restoring files:" >&2
+    printf '%s\n' "$compose_cfg" | sed 's/^/    /' >&2
+    echo >&2
+    echo "Usually a file the compose expects is missing from the archive." >&2
+    echo "Create it, then re-run:  ./bin/restore.sh -y $ARCHIVE" >&2
+    exit 1
+fi
+PROJECT=$(printf '%s\n' "$compose_cfg" | sed -n 's/^name: //p' | head -n1)
 if [ -z "${PROJECT:-}" ]; then
     echo "Could not determine the compose project name after restoring files." >&2
     echo "Restore the volumes manually, or fix the env files and re-run." >&2

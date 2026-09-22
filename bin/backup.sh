@@ -49,6 +49,7 @@ FILE_PATHS=(
     cloudflare.env
     bot.env
     credentials.env
+    passkeys.env                   # optional, only with the passkeys profile
     auth.env                       # legacy, only if still around
     modules.env                    # optional COMPOSE_PROFILES override
     .envrc                         # optional operator direnv file

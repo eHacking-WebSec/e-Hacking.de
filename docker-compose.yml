@@ -418,7 +418,8 @@ services:
       - passkeys-instance-data:/app/data/instances
     env_file:
       - .env
-      - passkeys.env
+      - path: passkeys.env
+        required: false
     environment:
       - PORT=3000
       - NODE_ENV=production
