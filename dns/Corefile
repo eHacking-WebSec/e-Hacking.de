@@ -1,0 +1,81 @@
+# eHacking in-network DNS resolver (CoreDNS).
+#
+# Why this exists
+# ---------------
+# Containers have to reach the platform through Traefik, and Traefik can
+# only be addressed by the *hostname* its routers match on — SNI and the
+# Host header both carry it. Compose can make a container answer to extra
+# names (the `aliases:` on traefik below), but only to a FINITE list. The
+# catcher hands every student their own salt subdomain
+# `<salt>.${CATCHER_HOST}`, which is an unbounded set, so that list can
+# never be complete.
+#
+# Measured on this host before the resolver existed:
+#
+#     container -> getent hosts my.e-attacker.de   132.195.101.17  (correct)
+#     container -> 132.195.101.17:443              REFUSED
+#     container -> 132.195.101.17:10443            OPEN
+#
+# The name resolves to this machine's own public address, but rootless
+# podman's egress traverses neither the host's nat/PREROUTING nor its
+# nat/OUTPUT, so the firewall's 443->10443 redirect never applies and
+# nothing answers on 443. No host firewall rule can fix that; the name has
+# to resolve inside the compose network instead.
+#
+# The symptom was the OIDC SP's server-side discovery fetch of
+# `https://<salt>.${CATCHER_HOST}/.well-known/openid-configuration`
+# (AttackManager.startWebfinger) failing with `ConnectException:
+# Connection refused`, which takes the whole mIdP family (ids-1..ids-4)
+# with it. The same path carries out-of-band XXE and SSRF exfiltration
+# from xml-sec, soap-sec, json-sec and rest-api-sec.
+#
+# What it does
+# ------------
+# Two rewrites, one per zone this platform serves. Both cover the apex and
+# every subdomain, so `e-hacking.de`, `sp.e-hacking.de`,
+# `x.challenge.recruiting.e-hacking.de`, `e-attacker.de` and any
+# `<salt>.e-attacker.de` all land on Traefik.
+#
+# ---> These two lines are the only place the zones are written down
+#      besides .env. Adding a hostname under either zone needs no change
+#      here; adding a whole new zone does.
+#
+# The rewrite target is the *service name* `traefik`, not an address. The
+# container runtime's own DNS (podman's aardvark-dns, Docker's embedded
+# resolver) resolves it on every query, so this file needs no static IP
+# and survives `compose up --force-recreate`.
+#
+# `answer auto` rewrites the owner name in the response back to the name
+# the client asked for. Without it a client asking for
+# `abc.e-attacker.de.` gets an answer owned by `traefik.`, which a strict
+# resolver may drop as off-question.
+#
+# Everything else — service names like `victim-bot` or `couchdb`, and real
+# internet names — is forwarded to the runtime's own resolver via this
+# container's /etc/resolv.conf. That is what keeps service-name resolution
+# working for every container pointed at us, and it is also how the
+# rewritten `traefik` query gets answered.
+#
+# Note the trailing `\.$`: CoreDNS matches the fully qualified query name,
+# which always ends in a dot. A pattern without it silently never matches
+# and every query falls through to `forward` — which looks exactly like
+# the resolver not being wired up at all.
+#
+# Debugging: add `log` to the block below and `just restart dns` to get one
+# line per query. The `reload` plugin picks up edits within ~30s without a
+# restart.
+
+.:53 {
+    rewrite name regex ^(.*\.)?e-hacking\.de\.$  traefik answer auto
+    rewrite name regex ^(.*\.)?e-attacker\.de\.$ traefik answer auto
+
+    forward . /etc/resolv.conf
+
+    # Cap the TTL clients cache. The rewrite plugin hands out 600s by
+    # default; if traefik is recreated onto a new address that would pin
+    # clients to the dead one for ten minutes.
+    cache 30
+
+    reload
+    errors
+}

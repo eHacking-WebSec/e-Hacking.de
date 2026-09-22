@@ -3,6 +3,17 @@
 # `restart-policy=always`, which would skip `unless-stopped` entirely.
 # bin/init-podman.sh enables that unit.
 
+# Clients name their resolver by address — a service name is rejected
+# outright (`ParseAddr("dns"): unable to parse IP`). Hence the pinned
+# subnet on the `ehacking` network and the one static address in the file.
+x-dns: &dns
+  - ${DNS_RESOLVER_IP:-10.53.0.53}
+
+x-depends-on-dns: &depends-on-dns
+  dns:
+    required: true
+    condition: service_started
+
 services:
 
   traefik:
@@ -62,13 +73,38 @@ services:
       - 'traefik.http.routers.dashboard.service=api@internal'
       - 'traefik.http.routers.dashboard.middlewares=basicauth@file'
 
+# In-network resolver: makes the platform's own hostnames — including the
+# catcher's unbounded per-salt subdomains — resolve to traefik from inside
+# the containers. See dns/Corefile for the full rationale.
+  dns:
+    image: docker.io/coredns/coredns:1.14.7
+    command:
+      - '-conf'
+      - '/etc/coredns/Corefile'
+    volumes:
+      - './dns/Corefile:/etc/coredns/Corefile:ro'
+    networks:
+      ehacking:
+        # The only static address in the stack.
+        ipv4_address: ${DNS_RESOLVER_IP:-10.53.0.53}
+    expose:
+      - "53/udp"
+      - "53/tcp"
+    restart: always
+
 # root module: lading page with all available modules for selection
   root:
     image: ghcr.io/ehacking-websec/ehacking/root:latest
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # menu links point at the other modules' public hostnames;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
     labels:
@@ -88,9 +124,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/json-sec
     profiles: [json]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # jku/x5u fetch a student-supplied URL — typically their catcher;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - flags_json-sec.env
@@ -110,9 +152,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/oidc
     profiles: [oidc]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # the SP fetches <salt>.${CATCHER_HOST}/.well-known/... server-side;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - path: credentials.env
@@ -142,9 +190,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/rest-api-sec
     profiles: [rest]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # SSRF challenges call out to a student-supplied URL;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - flags_rest-api-sec.env
@@ -177,9 +231,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/saml
     profiles: [saml]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # cross-SP flows reference the catcher's hostnames;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - path: credentials.env
@@ -203,6 +263,9 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/soap-sec
     profiles: [soap]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
@@ -212,6 +275,9 @@ services:
       axis2-fake:
         required: true
         condition: service_started
+    # out-of-band XXE exfiltration to a student's catcher;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - flags_soap-sec.env
@@ -264,9 +330,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/web-sec
     profiles: [web]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # cross-origin challenges reference the platform's own hosts;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
     labels:
@@ -285,9 +357,15 @@ services:
     image: ghcr.io/ehacking-websec/ehacking/xml-sec
     profiles: [xml]
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
+    # out-of-band XXE exfiltration to a student's catcher;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - flags_xml-sec.env
@@ -314,7 +392,11 @@ services:
     profiles: [catcher, oidc, saml]
     pull_policy: always
     depends_on:
+      - dns
       - traefik
+    # the mSP template posts token-exchange calls at the honest IdP;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - path: credentials.env
@@ -351,7 +433,11 @@ services:
     pull_policy: always
     init: true
     depends_on:
+      - dns
       - oidc
+    # the headless browser follows links onto catcher subdomains;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     env_file:
       - .env
       - path: credentials.env
@@ -504,12 +590,18 @@ services:
     pull_policy: always
     init: true
     depends_on:
+      dns:
+        required: true
+        condition: service_started
       traefik:
         required: true
         condition: service_started
       recruiting-challenge:
         required: true
         condition: service_started
+    # puppeteer navigates CHALLENGE_PUBLIC_ORIGIN;
+    # that name only resolves through the in-network resolver.
+    dns: *dns
     environment:
       PORT: "1337"
       REGISTRY_DB_PATH: /data/registry.db
@@ -598,7 +690,14 @@ services:
     restart: always
 
 networks:
+  # Pinned so the `dns` service can hold a fixed address: a client can
+  # only name its resolver by IP, and an address is only assignable on a
+  # network with a user-configured subnet. Check it does not collide
+  # with an existing network on the host (`podman network ls`).
   ehacking:
+    ipam:
+      config:
+        - subnet: ${EHACKING_SUBNET:-10.53.0.0/24}
   soap-internal:
 
 volumes:

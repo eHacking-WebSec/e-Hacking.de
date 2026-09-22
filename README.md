@@ -212,6 +212,41 @@ listening, and runs a behavioural hairpin probe that needs no root. If the
 admin cannot add rule 3, `just firewall-hairpin` adds it locally and
 `just firewall-persist` makes it survive a reboot — both need sudo.
 
+## In-network name resolution
+
+Containers reach the platform through Traefik, and Traefik can only be
+addressed by the hostname its routers match on. The `aliases:` on the
+traefik service cover a finite list of names — but the catcher hands every
+student their own salt subdomain `<salt>.${CATCHER_HOST}`, an unbounded
+set, so that list can never be complete.
+
+Without help those names resolve through public DNS to this machine's own
+address, and that does not work from a container:
+
+```
+container -> getent hosts my.e-attacker.de   132.195.101.17   (correct)
+container -> 132.195.101.17:443              REFUSED
+container -> 132.195.101.17:10443            OPEN
+```
+
+Rootless podman's egress traverses neither the host's `nat/PREROUTING` nor
+its `nat/OUTPUT`, so the firewall's 443→10443 redirect never applies. No
+host firewall rule fixes this — the name has to resolve *inside* the
+compose network.
+
+The `dns` service (CoreDNS, config in `dns/Corefile`) rewrites both zones
+onto the service name `traefik` and forwards everything else to the
+runtime's own resolver. The services that need it carry `dns: *dns`.
+
+What breaks without it: the OIDC SP's server-side discovery fetch for the
+mIdP challenges (ids-1…ids-4) fails with `ConnectException: Connection
+refused`, and out-of-band XXE/SSRF exfiltration from xml-sec, soap-sec,
+json-sec and rest-api-sec cannot leave the container.
+
+`EHACKING_SUBNET` is pinned only so the resolver can hold a fixed address —
+a client can name its resolver by IP alone. Check the range does not
+collide with an existing network on the host (`podman network ls`).
+
 ## Selecting modules
 
 `just up` brings up every CTF module by default. To run only a subset,
