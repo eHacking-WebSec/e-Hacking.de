@@ -89,6 +89,13 @@ IPS=${PUBLIC_IPS:-$(detect_ips)}
 
 # ----------------------------------------------------------------------
 
+# The hairpin rule, in one place. -C only matches a rule specified exactly
+# as it was added, so check, add and delete must all use this spec — the
+# `-m comment` included.
+hairpin_rule() {  # hairpin_rule <ip> <from-port> <to-port>
+    printf '%s\n' "-d $1 -p tcp --dport $2 -j REDIRECT --to-ports $3 -m comment --comment eHacking-hairpin"
+}
+
 do_check() {
     local rc=0
 
@@ -205,8 +212,8 @@ do_check() {
     for ip in $IPS; do
         for pair in "${PUB_HTTP}:${HOST_HTTP}" "${PUB_HTTPS}:${HOST_HTTPS}"; do
             local from=${pair%%:*} to=${pair##*:}
-            if $SUDO_RO iptables -t nat -C OUTPUT -d "$ip" -p tcp --dport "$from" \
-                 -j REDIRECT --to-ports "$to" 2>/dev/null; then
+            # shellcheck disable=SC2046  # the spec must word-split
+            if $SUDO_RO iptables -t nat -C OUTPUT $(hairpin_rule "$ip" "$from" "$to") 2>/dev/null; then
                 good "${ip}:${from} -> ${to}"
             else
                 bad "missing: ${ip}:${from} -> ${to}   (just firewall-hairpin)"
@@ -242,14 +249,12 @@ do_hairpin() {
     for ip in $IPS; do
         for pair in "${PUB_HTTP}:${HOST_HTTP}" "${PUB_HTTPS}:${HOST_HTTPS}"; do
             local from=${pair%%:*} to=${pair##*:}
-            if $SUDO iptables -t nat -C OUTPUT -d "$ip" -p tcp --dport "$from" \
-                 -j REDIRECT --to-ports "$to" 2>/dev/null; then
+            # shellcheck disable=SC2046  # the spec must word-split
+            if $SUDO iptables -t nat -C OUTPUT $(hairpin_rule "$ip" "$from" "$to") 2>/dev/null; then
                 info "already present: ${ip}:${from} -> ${to}"
             else
                 info "adding: ${ip}:${from} -> ${to}"
-                $SUDO iptables -t nat -A OUTPUT -d "$ip" -p tcp --dport "$from" \
-                    -j REDIRECT --to-ports "$to" \
-                    -m comment --comment "eHacking hairpin"
+                $SUDO iptables -t nat -A OUTPUT $(hairpin_rule "$ip" "$from" "$to")
             fi
         done
     done
