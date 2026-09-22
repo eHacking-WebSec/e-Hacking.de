@@ -142,8 +142,6 @@ services:
       traefik:
         required: true
         condition: service_started
-    ports:
-      - 30003:8787
     env_file:
       - .env
       - flags_rest-api-sec.env
@@ -179,8 +177,6 @@ services:
       traefik:
         required: true
         condition: service_started
-    ports:
-      - 30004:8787
     env_file:
       - .env
       - path: credentials.env
@@ -213,8 +209,6 @@ services:
       axis2-fake:
         required: true
         condition: service_started
-    ports:
-      - 30007:8787
     env_file:
       - .env
       - flags_soap-sec.env
