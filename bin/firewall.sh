@@ -117,19 +117,14 @@ do_check() {
         fi
     done
 
-    # Behavioural probe, no root required. A request from this host to a
-    # public hostname is locally-originated, so it takes nat/OUTPUT — the
-    # same path a container takes (rootless podman egress is a host-side
-    # socket). If this works, the hairpin works.
-    #
-    # It MUST be a hostname that resolves to this host. A CDN-proxied name
-    # resolves to the CDN, so the request leaves the box and comes back as
-    # ordinary inbound traffic through nat/PREROUTING — it would pass with
-    # no OUTPUT rule in place at all and report a hairpin that does not
-    # exist. $IPS already holds our own addresses, so pick a name that maps
-    # into it.
-    say "Hairpin probe (no root needed)"
-    local probe_host="" h hips
+    # The probe has to run INSIDE a container on the compose network, not
+    # in the host shell. Measured on the deploy host: a container reaching
+    # <public-ip>:443 gets REFUSED while :10443 is OPEN — rootless podman's
+    # egress traverses neither the host's nat/PREROUTING nor its nat/OUTPUT,
+    # so a host-side curl proves nothing about the path that actually
+    # matters (the OIDC SP fetching a catcher salt subdomain server-side).
+    say "Hairpin probe — from inside the compose network"
+    local probe_host="" h hips ip
     for h in $(for f in .env modules.env; do
             [ -f "$f" ] || continue
             sed -n 's/\r$//; s/^\(CATCHER_HOST\|SP_HOST\|IDP_HOST\|HOST1\)=\(.*\)$/\2/p' "$f"
@@ -139,27 +134,39 @@ do_check() {
             if printf '%s\n' $IPS | grep -qxF "$ip"; then probe_host="$h"; break 2; fi
         done
     done
+
+    local net=""
+    net=$(./bin/compose config --format json 2>/dev/null \
+        | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 || true)
+    [ -n "$net" ] && net="${net}_ehacking"
+
     if [ -z "$probe_host" ]; then
         warn "No configured hostname resolves to one of this host's own"
-        warn "addresses — every one of them is behind a CDN or points"
-        warn "elsewhere. The hairpin cannot be probed from here."
-    elif ! command -v curl >/dev/null 2>&1; then
-        warn "curl not installed — skipping."
+        warn "addresses — the hairpin cannot be probed from here."
+    elif [ -z "$RUNTIME" ]; then
+        warn "No container runtime — skipping the probe."
+    elif ! "$RUNTIME" network exists "$net" 2>/dev/null \
+         && ! "$RUNTIME" network inspect "$net" >/dev/null 2>&1; then
+        warn "Compose network '${net}' not found — is the stack up?"
     else
-        local code
-        code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-                 "https://${probe_host}/" 2>/dev/null || true)
-        if [ -n "$code" ] && [ "$code" != "000" ]; then
-            good "https://${probe_host}/ from this host -> HTTP ${code}"
-        else
-            bad "https://${probe_host}/ from this host is unreachable"
-            info "That is the hairpin. The OIDC SP fetches a catcher salt"
-            info "subdomain server-side for the mIdP challenges and fails the"
-            info "same way ('ConnectException: Connection refused')."
-            info "Fix with 'just firewall-hairpin', or have the admin add the"
-            info "nat/OUTPUT rules."
-            rc=1
-        fi
+        local out
+        out=$("$RUNTIME" run --rm --network "$net" docker.io/library/alpine \
+                sh -c "echo | nc -w5 ${probe_host} ${PUB_HTTPS} >/dev/null 2>&1 \
+                       && echo OPEN || echo REFUSED" 2>/dev/null || true)
+        case "$out" in
+            OPEN)
+                good "a container reaches ${probe_host}:${PUB_HTTPS}" ;;
+            REFUSED)
+                bad "a container CANNOT reach ${probe_host}:${PUB_HTTPS}"
+                info "The OIDC SP fetches <salt>.${probe_host}/.well-known/..."
+                info "server-side for the mIdP challenges and fails the same"
+                info "way ('ConnectException: Connection refused'). Host nat"
+                info "rules do not govern this path — the fix is to make the"
+                info "name resolve inside the compose network."
+                rc=1 ;;
+            *)
+                warn "Probe inconclusive (could not run the helper container)." ;;
+        esac
     fi
     info "Inbound (the internet -> ${PUB_HTTPS} -> ${HOST_HTTPS}) cannot be"
     info "probed from here — it needs a request from outside this host."
