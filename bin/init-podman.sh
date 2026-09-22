@@ -13,7 +13,7 @@
 # Steps:
 #   1. Packages: podman + rootless deps + a compose-go provider.
 #   2. Rootless plumbing: subuid/subgid, the user podman.socket.
-#   3. Host: unprivileged low ports (sysctl) + linger.
+#   3. Host: low-port sysctl (only if publishing on 80/443) + linger.
 #   4. Hand-off: restore a backup if present, else list what's still
 #      needed (cloudflare.env etc.) before `just init && just up`.
 #
@@ -194,15 +194,30 @@ fi
 # 3. Host: unprivileged low ports + linger.
 # ----------------------------------------------------------------------
 
-say "Unprivileged low ports (80/443)"
-cur=$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start 2>/dev/null || echo 1024)
-if [ "$cur" -le 80 ]; then
-    info "ip_unprivileged_port_start=${cur} already allows binding 80/443."
+say "Unprivileged low ports"
+# Only the HOST-side publish ports need root. Traefik's 80/443 bind
+# happens inside its own netns and is handled by compose.podman.yml.
+# Publishing on HOST_PORT_* (>=1024) skips the sysctl entirely, which
+# also avoids lowering the bind threshold host-wide.
+# Check every file bin/compose feeds Compose; take the lowest, which errs
+# towards asking for the sysctl rather than skipping a bind that needs it.
+lowest=$(for f in .env modules.env; do
+    [ -f "$f" ] && sed -n 's/\r$//; s/^HOST_PORT_HTTPS\?=\([0-9]\+\)$/\1/p' "$f"
+done | sort -n | head -n1)
+[ -n "$lowest" ] || lowest=80
+if [ "$lowest" -ge 1024 ]; then
+    info "Published ports start at ${lowest} (>= 1024) — no sysctl needed."
+    info "Make sure the host firewall preroutes 80/443 to them."
 else
-    info "Lowering ip_unprivileged_port_start to 80 (currently ${cur})…"
-    need_sudo
-    echo 'net.ipv4.ip_unprivileged_port_start=80' | $SUDO tee /etc/sysctl.d/podman-lowports.conf >/dev/null
-    $SUDO sysctl --quiet -w net.ipv4.ip_unprivileged_port_start=80
+    cur=$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start 2>/dev/null || echo 1024)
+    if [ "$cur" -le "$lowest" ]; then
+        info "ip_unprivileged_port_start=${cur} already allows binding ${lowest}."
+    else
+        info "Lowering ip_unprivileged_port_start to ${lowest} (currently ${cur})…"
+        need_sudo "sysctl net.ipv4.ip_unprivileged_port_start=${lowest} — or keep HOST_PORT_* >= 1024 and drop this step"
+        echo "net.ipv4.ip_unprivileged_port_start=${lowest}" | $SUDO tee /etc/sysctl.d/podman-lowports.conf >/dev/null
+        $SUDO sysctl --quiet -w "net.ipv4.ip_unprivileged_port_start=${lowest}"
+    fi
 fi
 
 say "Linger (keep the stack alive past logout)"

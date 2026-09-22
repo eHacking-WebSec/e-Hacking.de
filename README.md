@@ -63,10 +63,11 @@ Setup once per host:
 ```bash
 # Rootless podman (recommended):
 systemctl --user enable --now podman.socket
-# Let traefik bind 80/443 without root:
-echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/podman-lowports.conf
-sudo sysctl --system
 sudo loginctl enable-linger "$USER"     # keep the user manager alive past logout
+
+# Only if you publish directly on 80/443 (see "Ports" below):
+# echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee /etc/sysctl.d/podman-lowports.conf
+# sudo sysctl --system
 
 # Rootful podman (only if rootless is impractical):
 sudo systemctl enable --now podman.socket
@@ -80,6 +81,64 @@ Force a specific runtime/socket by exporting before `just`:
 RUNTIME=docker just up
 CONTAINER_SOCKET=/run/podman/podman.sock just up   # e.g. force rootful when both are running
 ```
+
+## Ports
+
+Two port pairs, and mixing them up breaks the CTF modules in subtle ways.
+
+| Variable | Meaning |
+|---|---|
+| `PORT_HTTP` / `PORT_HTTPS` | The **public** ports. They bind the traefik entrypoints *and* are handed to every module as env vars. |
+| `HOST_PORT_HTTP` / `HOST_PORT_HTTPS` | Where the host publishes those entrypoints. Invisible to the containers. |
+
+`PORT_HTTPS` must equal **the port clients put in their URLs** — 443.
+
+Module URLs come from two independent sources, later compared as raw
+strings (`Verifier_IDS.discoveryIssuerSpoofed()`): env-derived
+(`System.getenv("PORT_HTTPS")` — `ConfigBean`, the `{PORT_HTTPS}`
+placeholders in the SAML configs, `CATCHER_PUBLIC_PORT`, the victim-bot
+origins) and request-derived (`request.getServerPort()` — the OIDC
+discovery document and every id_token's `iss`).
+
+The request-derived half reads the port from the **`Host` header** and
+falls back to the scheme default when there is none — Traefik's
+`forwardedPort()` and Undertow's `getHostPort()` both hardcode 443 for
+TLS/https. Students arrive portless, so that half is **always 443**,
+whatever the entrypoint binds and whatever the host publishes. At
+`PORT_HTTPS=10443` the halves disagree and the honest `ids-1`/`ids-3`/
+`ids-4` flows throw `JWTVerificationException`. You can watch this on any
+stack whose `PORT_HTTPS` is not 443: a portless request returns `issuer`
+with `:443` next to a `resource_endpoint` carrying the configured port.
+
+The entrypoint stays on 443 for a separate reason — container→container
+calls use `https://host:443` built from `PORT_HTTPS`, resolved to the
+traefik container by the network aliases, so traefik must listen there.
+
+`:443` does appear inside generated URL values (`issuer`, `iss`,
+`redirect_uri=`); what is portless is the address bar, not every string
+the modules emit.
+
+`HOST_PORT_*` is the safe knob. The default `10080` / `10443` assumes the
+host firewall preroutes `80 -> 10080` and `443 -> 10443`. Both are
+>= 1024, so rootless podman publishes them without host privileges and
+`bin/init-podman.sh` skips the `ip_unprivileged_port_start` sysctl (which
+needs real root and lowers the bind threshold for every unprivileged user
+on the box). Traefik's own 80/443 bind happens inside its network
+namespace and costs nothing on the host.
+
+To publish directly on 80/443, set `HOST_PORT_HTTP=80` /
+`HOST_PORT_HTTPS=443` and re-run `bin/init-podman.sh`; it will then ask
+for the sysctl.
+
+Keep `10080` / `10443` unreachable from the internet. A client that
+addresses them directly puts the port in its `Host` header, which lands
+in the discovery `issuer` and breaks the OIDC flows for that client.
+
+**Check with the firewall admin** that the redirect also covers
+locally-originated traffic (the `OUTPUT` chain, not just `PREROUTING`).
+Container→container traffic to the public hostnames is resolved
+in-network by the traefik aliases and never leaves the box, so this only
+matters if something hairpins off the host's own public IP.
 
 ## Selecting modules
 

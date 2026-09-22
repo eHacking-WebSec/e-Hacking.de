@@ -20,9 +20,11 @@ services:
       - '--providers.file.directory=/etc/traefik/dynamic'
       - '--providers.file.watch=true'
       #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+    # Host side ≠ container side: HOST_PORT_* is only where the host
+    # publishes. PORT_* must stay 80/443 — see README → "Ports".
     ports:
-      - "${PORT_HTTP}:${PORT_HTTP}"
-      - "${PORT_HTTPS}:${PORT_HTTPS}"
+      - "${HOST_PORT_HTTP:-80}:${PORT_HTTP}"
+      - "${HOST_PORT_HTTPS:-443}:${PORT_HTTPS}"
       - "${PORT_TCP}:${PORT_TCP}"
     env_file:
       - cloudflare.env
