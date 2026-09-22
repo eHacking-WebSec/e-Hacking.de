@@ -197,9 +197,12 @@ say "Unprivileged low ports"
 # also avoids lowering the bind threshold host-wide.
 # Check every file bin/compose feeds Compose; take the lowest, which errs
 # towards asking for the sysctl rather than skipping a bind that needs it.
+# `[ -f ] && sed` as the loop's last command makes the loop exit 1 when the
+# file is absent; with pipefail + set -e that aborts the whole script.
 lowest=$(for f in .env modules.env; do
-    [ -f "$f" ] && sed -n 's/\r$//; s/^HOST_PORT_HTTPS\?=\([0-9]\+\)$/\1/p' "$f"
-done | sort -n | head -n1)
+    [ -f "$f" ] || continue
+    sed -n 's/\r$//; s/^HOST_PORT_HTTPS\?=\([0-9]\+\)$/\1/p' "$f"
+done | sort -n | head -n1 || true)
 [ -n "$lowest" ] || lowest=80
 if [ "$lowest" -ge 1024 ]; then
     info "Published ports start at ${lowest} (>= 1024) — no sysctl needed."
