@@ -234,9 +234,19 @@ its `nat/OUTPUT`, so the firewall's 443→10443 redirect never applies. No
 host firewall rule fixes this — the name has to resolve *inside* the
 compose network.
 
-The `dns` service (CoreDNS, config in `dns/Corefile`) rewrites both zones
-onto the service name `traefik` and forwards everything else to the
-runtime's own resolver. The services that need it carry `dns: *dns`.
+The `dns` service (CoreDNS, config in `dns/Corefile`) serves one block per
+zone — `${HOST1}` and `${CATCHER_HOST}`, handed in from `.env` so they are
+not written down twice — rewrites every name in them onto the service
+name `traefik`, and forwards everything else to the runtime's own
+resolver. The services that need it carry `dns: *dns`.
+
+Adding a hostname under an existing zone needs no change. Adding a whole
+new zone means a new block in the Corefile plus a matching
+`environment:` entry on the `dns` service.
+
+First start after this change: the `ehacking` network has to be recreated
+so the pinned subnet applies — `just down && just up`. Otherwise podman
+refuses with `requested static ip ... not in any subnet on network`.
 
 What breaks without it: the OIDC SP's server-side discovery fetch for the
 mIdP challenges (ids-1…ids-4) fails with `ConnectException: Connection

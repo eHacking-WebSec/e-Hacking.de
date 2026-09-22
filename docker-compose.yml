@@ -83,6 +83,11 @@ services:
       - '/etc/coredns/Corefile'
     volumes:
       - './dns/Corefile:/etc/coredns/Corefile:ro'
+    environment:
+      # The zones live in .env; the Corefile reads them via {$ZONE_*} so
+      # they are not written down twice.
+      - ZONE_PLATFORM=${HOST1}
+      - ZONE_CATCHER=${CATCHER_HOST}
     networks:
       ehacking:
         # The only static address in the stack.

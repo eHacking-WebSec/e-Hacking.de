@@ -31,51 +31,58 @@
 #
 # What it does
 # ------------
-# Two rewrites, one per zone this platform serves. Both cover the apex and
-# every subdomain, so `e-hacking.de`, `sp.e-hacking.de`,
-# `x.challenge.recruiting.e-hacking.de`, `e-attacker.de` and any
-# `<salt>.e-attacker.de` all land on Traefik.
+# One server block per zone this platform serves. DNS zone semantics do the
+# "is this name in the zone" test natively: the block matches the apex and
+# every subdomain at any depth, and nothing else. A name that merely ends
+# with the zone text (`notmy-e-hacking.de`) or contains it in the middle
+# (`e-hacking.de.evil.com`) is NOT in the zone and falls through to the
+# catch-all block — verified, both return NXDOMAIN rather than traefik.
 #
-# ---> These two lines are the only place the zones are written down
-#      besides .env. Adding a hostname under either zone needs no change
-#      here; adding a whole new zone does.
+# The zone names come from the environment, so .env stays the single place
+# they are written down. Adding a hostname under an existing zone needs no
+# change here; adding a whole new zone means a new block plus a matching
+# `environment:` entry on the dns service.
 #
-# The rewrite target is the *service name* `traefik`, not an address. The
-# container runtime's own DNS (podman's aardvark-dns, Docker's embedded
-# resolver) resolves it on every query, so this file needs no static IP
-# and survives `compose up --force-recreate`.
+# Inside a block every name is rewritten to the *service name* `traefik`,
+# not an address. The container runtime's own DNS (podman's aardvark-dns,
+# Docker's embedded resolver) resolves it on every query, so this file
+# needs no static IP and survives `compose up --force-recreate`.
 #
 # `answer auto` rewrites the owner name in the response back to the name
 # the client asked for. Without it a client asking for
 # `abc.e-attacker.de.` gets an answer owned by `traefik.`, which a strict
 # resolver may drop as off-question.
 #
-# Everything else — service names like `victim-bot` or `couchdb`, and real
-# internet names — is forwarded to the runtime's own resolver via this
-# container's /etc/resolv.conf. That is what keeps service-name resolution
-# working for every container pointed at us, and it is also how the
-# rewritten `traefik` query gets answered.
+# The final `.:53` block forwards everything else — service names like
+# `victim-bot` or `couchdb`, and real internet names — to the runtime's own
+# resolver via this container's /etc/resolv.conf. That is what keeps
+# service-name resolution working for every container pointed at us, and it
+# is also how the rewritten `traefik` query gets answered.
 #
-# Note the trailing `\.$`: CoreDNS matches the fully qualified query name,
-# which always ends in a dot. A pattern without it silently never matches
-# and every query falls through to `forward` — which looks exactly like
-# the resolver not being wired up at all.
-#
-# Debugging: add `log` to the block below and `just restart dns` to get one
-# line per query. The `reload` plugin picks up edits within ~30s without a
-# restart.
+# Debugging: add `log` to a block and `just restart dns` to get one line per
+# query. Two traps cost real time here, both the same shape: CoreDNS matches
+# the FULLY QUALIFIED name, with a trailing dot. A `rewrite name regex`
+# without `\.$`, and a `rewrite name suffix` without the trailing dot, both
+# silently never match — which looks exactly like the resolver not being
+# wired up at all.
+
+{$ZONE_PLATFORM}:53 {
+    rewrite name regex .* traefik answer auto
+    forward . /etc/resolv.conf
+    cache 30
+    errors
+}
+
+{$ZONE_CATCHER}:53 {
+    rewrite name regex .* traefik answer auto
+    forward . /etc/resolv.conf
+    cache 30
+    errors
+}
 
 .:53 {
-    rewrite name regex ^(.*\.)?e-hacking\.de\.$  traefik answer auto
-    rewrite name regex ^(.*\.)?e-attacker\.de\.$ traefik answer auto
-
     forward . /etc/resolv.conf
-
-    # Cap the TTL clients cache. The rewrite plugin hands out 600s by
-    # default; if traefik is recreated onto a new address that would pin
-    # clients to the dead one for ten minutes.
     cache 30
-
     reload
     errors
 }
