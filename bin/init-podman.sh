@@ -66,6 +66,19 @@ need_sudo() {  # need_sudo "<one-time step for the host admin>"
     exit 1
 }
 
+# `just --list` renders this recipe as `init-podman ARCHIVE=''`, which reads
+# like you pass it as ARCHIVE=<path>. just takes recipe parameters
+# positionally, so that form arrives here as the literal string
+# "ARCHIVE=<path>". No real archive is ever named that, so accept it and say
+# what the plain form is.
+case "$BACKUP_ARG" in
+    ARCHIVE=*)
+        BACKUP_ARG="${BACKUP_ARG#ARCHIVE=}"
+        warn "Read that as a path. just takes recipe arguments positionally:"
+        warn "  just init-podman ${BACKUP_ARG}"
+        ;;
+esac
+
 if [ "$(id -u)" -eq 0 ]; then
     warn "Running as root. Rootless Podman wants a regular user — the stack"
     warn "will be owned by root. Press Ctrl-C to abort, or continue anyway."
