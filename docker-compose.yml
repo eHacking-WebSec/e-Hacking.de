@@ -32,6 +32,7 @@ services:
       - '--entrypoints.websecure.http.sanitizePath=false'
       - '--entrypoints.websecure.http.tls=true'
       - '--providers.docker=true'
+      - '--providers.docker.network=ehacking'
       - '--providers.file.directory=/etc/traefik/dynamic'
       - '--providers.file.watch=true'
       #- "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
@@ -706,6 +707,7 @@ networks:
   # network with a user-configured subnet. Check it does not collide
   # with an existing network on the host (`podman network ls`).
   ehacking:
+    name: ehacking
     ipam:
       config:
         - subnet: ${EHACKING_SUBNET:-10.53.0.0/24}
