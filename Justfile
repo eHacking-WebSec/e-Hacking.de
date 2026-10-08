@@ -68,7 +68,7 @@ reset:
         traefik/dynamic/basicauth.yml \
         flags_axis2-flag.env flags_json-sec.env flags_oidc.env \
         flags_rest-api-sec.env flags_saml.env flags_soap-sec.env \
-        flags_xml-sec.env \
+        flags_xml-sec.env flags_noodle.env \
         flag_xslt1.xml flag_xxe1.txt flag_xxe2.txt
     @just init
 

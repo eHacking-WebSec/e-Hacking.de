@@ -9,7 +9,9 @@
 # server without an eHacking source checkout. The runtime (docker or
 # podman) is auto-detected via bin/runtime-env.sh.
 #
-# crawling-maze and any other third-party module is NOT in scope here;
+# Modules published outside the eHacking monorepo (e.g. noodle) are in
+# scope too, as long as their image follows the same `_dummy` convention —
+# list them with their full image name. crawling-maze is NOT in scope;
 # flags_crawling-maze.env stays hand-managed.
 #
 # Usage:
@@ -34,8 +36,13 @@ esac
 
 REGISTRY="${DOCKER_REGISTRY:-ghcr.io/ehacking-websec/ehacking}"
 
-# Modules whose Dockerfiles carry FLAG_ ENV defaults.
-SERVICES=(json-sec oidc rest-api-sec saml soap-sec xml-sec axis2-flag)
+# Modules whose Dockerfiles carry FLAG_ ENV defaults. A bare name is pulled
+# as ${REGISTRY}/<name>:latest; a module with its own repository is listed
+# as <name>=<image>. Either way the output file is flags_<name>.env.
+SERVICES=(
+  json-sec oidc rest-api-sec saml soap-sec xml-sec axis2-flag
+  noodle=ghcr.io/ehacking-websec/noodle:latest
+)
 
 rnd() {
   # 16 alphanumeric chars. tr stops once head closes the pipe.
@@ -52,14 +59,15 @@ fi
 
 # Each service is independent (disjoint output file, local `existing` map),
 # so we fan out and wait. Per-service stderr is buffered to a tmp log so the
-# summary lines stay readable instead of interleaving across 7 jobs.
+# summary lines stay readable instead of interleaving across the jobs.
 logdir=$(mktemp -d)
 trap 'rm -rf "$logdir"' EXIT
 
 process_service() {
-  local svc="$1"
+  local svc="${1%%=*}"
   local out="flags_${svc}.env"
   local image="${REGISTRY}/${svc}:latest"
+  [[ "$1" == *=* ]] && image="${1#*=}"
 
   if ! "$RUNTIME" pull -q "$image" >/dev/null 2>&1; then
     echo "warn: cannot pull $image — skipping $svc" >&2
@@ -119,8 +127,9 @@ process_service() {
 }
 
 pids=()
-for svc in "${SERVICES[@]}"; do
-  process_service "$svc" >"$logdir/$svc.out" 2>"$logdir/$svc.log" &
+for entry in "${SERVICES[@]}"; do
+  svc="${entry%%=*}"
+  process_service "$entry" >"$logdir/$svc.out" 2>"$logdir/$svc.log" &
   pids+=("$!")
 done
 
@@ -128,7 +137,7 @@ done
 # order. Track failures but keep going so every service gets reported.
 fail=0
 for i in "${!SERVICES[@]}"; do
-  svc="${SERVICES[$i]}"
+  svc="${SERVICES[$i]%%=*}"
   if ! wait "${pids[$i]}"; then
     echo "error: $svc failed (exit $?)" >&2
     fail=1

@@ -42,7 +42,7 @@ is gitignored; here's how to create each:
 | `traefik/dynamic/basicauth.yml` | Shared `basicauth` middleware (recruiting-instructor + the dashboard router). Hot-reloaded by Traefik's file provider — rotate without restarting. | `just add-basicauth-user <name>` (`just init` calls this for the first user) |
 | `bot.env` | Internal secret for recruiting-bot ↔ recruiting-challenge auth. | `./bin/make-bot-env.sh` |
 | `credentials.env` | WildFly application principals (`attacker`, `victim`, `admin`, `oemmes`) and catcher access gates (`/__catcher` signup + `/__instructor`). | `./bin/make-credentials.sh` |
-| `flags_*.env` | Per-module challenge flags. Format: `FLAG_<KEY>=<value>` matching the `ENV FLAG_*` lines in each module's `Dockerfile`. Modules in scope: `json-sec`, `oidc`, `rest-api-sec`, `saml`, `soap-sec`, `xml-sec`, `axis2-flag`. `crawling-maze` is a separate project — its `flags_crawling-maze.env` is hand-managed. | `./bin/make-flags.sh` (reads each published image's `FLAG_*` defaults, swaps each `_dummy` marker for a random token; same script also writes `flag_xslt1.xml`, `flag_xxe1.txt`, `flag_xxe2.txt` which xml-sec reads as bind-mounted files) |
+| `flags_*.env` | Per-module challenge flags. Format: `FLAG_<KEY>=<value>` matching the `ENV FLAG_*` lines in each module's `Dockerfile`. Modules in scope: `json-sec`, `oidc`, `rest-api-sec`, `saml`, `soap-sec`, `xml-sec`, `axis2-flag`, `noodle` (own repository; listed with its full image name in `bin/make-flags.sh`). `crawling-maze` is a separate project — its `flags_crawling-maze.env` is hand-managed. | `./bin/make-flags.sh` (reads each published image's `FLAG_*` defaults, swaps each `_dummy` marker for a random token; same script also writes `flag_xslt1.xml`, `flag_xxe1.txt`, `flag_xxe2.txt` which xml-sec reads as bind-mounted files) |
 
 ## Container runtime
 
@@ -280,6 +280,7 @@ Available profiles (omit to skip):
 | `xml` | `xml-sec` |
 | `passkeys` | `passkeys-app`, `passkeys-mongo` |
 | `maze` | `crawling-maze` |
+| `noodle` | `noodle` |
 | `rookies` | `rookies` |
 | `recruiting` | `recruiting-challenge`, `recruiting-bot`, `recruiting-instructor` |
 | `catcher` | `catcher` (also auto-starts when `oidc` or `saml` is enabled) |

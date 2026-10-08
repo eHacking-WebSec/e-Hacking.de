@@ -564,6 +564,39 @@ services:
     env_file:
       - flags_crawling-maze.env
 
+  # Noodle: beginner CTF (CSRF + IDOR) with a Chromium admin bot.
+  # The bot only loads pages from 127.0.0.1 inside the container, so it
+  # needs neither the in-network resolver nor access to other services.
+  noodle:
+    image: ghcr.io/ehacking-websec/noodle:latest
+    profiles: [noodle]
+    pull_policy: always
+    depends_on:
+      traefik:
+        required: true
+        condition: service_started
+    environment:
+      PUBLIC_URL: https://${NOODLE_HOST}
+    env_file:
+      - flags_noodle.env
+    # Chromium needs some memory; 1 GB is plenty for the default bot
+    # concurrency.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    labels:
+      - "traefik.enable=true"
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.http.routers.noodle.entrypoints=websecure"
+      - "traefik.http.routers.noodle.rule=Host(`${NOODLE_HOST}`)"
+      - "traefik.http.routers.noodle.tls=true"
+      - "traefik.http.routers.noodle.tls.certresolver=letsencrypt"
+      - "traefik.http.services.noodle.loadbalancer.server.port=3000"
+    restart: always
+    networks:
+      - ehacking
+
 # Recruiting platform
   recruiting-challenge:
     image: ghcr.io/ehacking-websec/recruiting/challenge:latest
