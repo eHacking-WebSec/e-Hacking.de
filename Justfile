@@ -35,11 +35,13 @@ update:
     # Before the pull, not after: a disk that fills mid-pull leaves
     # half-extracted layers behind.
     ./bin/disk.sh check
-    ./bin/compose pull
-    # Top up flags_<svc>.env so new FLAG_ keys from freshly-pulled
-    # images get a real value before the container starts. Existing
-    # flags are preserved (no --force).
+    # Top up flags_<svc>.env so new FLAG_ keys get a real value before
+    # the container starts. Existing flags are preserved (no --force).
+    # Before `compose pull`, not after: compose refuses to load the config
+    # while a newly added module's flags_<svc>.env is still missing.
+    # make-flags.sh pulls the flag-bearing images itself.
     ./bin/make-flags.sh
+    ./bin/compose pull
     @just up
 
 # Pull all images without restarting anything.
